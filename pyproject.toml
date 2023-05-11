@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "tm-discord-bot"
+version = "0.1.0"
+description = ""
+authors = ["pohsiangjuan <pohsiangjuan@igs.com.tw>"]
+readme = "README.md"
+packages = [{include = "tm_discord_bot"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+discord = "^2.1.0"
+pygsheets = "^2.0.6"
+openai = "^0.27.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
