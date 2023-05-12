@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tm-discord-bot"
-version = "0.1.0"
+version = "0.1.1"
 description = ""
 authors = ["pohsiangjuan <pohsiangjuan@igs.com.tw>"]
 readme = "README.md"

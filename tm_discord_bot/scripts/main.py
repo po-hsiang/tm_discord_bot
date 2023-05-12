@@ -1,9 +1,9 @@
-from tm_discord_bot.scripts.plugins.two_choices_one_system import TwoChoicesOneSystem
-from tm_discord_bot.scripts.plugins.youtube_api import YouTubeAPIHandler
-from tm_discord_bot.scripts.plugins.pull_system import pull_a_sticks
-from tm_discord_bot.scripts.plugins.openai_api import OpenAI_API
-from tm_discord_bot.scripts.plugins.eat_what_system import WhatToEat
-from tm_discord_bot.scripts.config_utils import read_config_file
+from plugins.two_choices_one_system import TwoChoicesOneSystem
+from plugins.youtube_api import YouTubeAPIHandler
+from plugins.eat_what_system import WhatToEat
+from plugins.pull_system import PullSystem
+from plugins.openai_api import OpenAI_API
+from config_utils import read_config_file
 import discord
 
 CONFIG = read_config_file()
@@ -16,6 +16,7 @@ what_to_eat = WhatToEat()
 yt_song = YouTubeAPIHandler()
 chat_gpt = OpenAI_API()
 two_choice_game = TwoChoicesOneSystem(what_to_eat.total_answers_list)
+pull_system = PullSystem()
 
 SONG_COMMAND_LIST = ["!聽", "!歌", "!聽歌", "!listen", "!song"]
 
@@ -65,7 +66,7 @@ async def on_message(message):
             await message.channel.send(f"{message.author.mention} 她已婚QQ")
 
         if user_msg == "!抽":
-            sticks_result = pull_a_sticks()
+            sticks_result = pull_system.pull_a_sticks()
             await message.channel.send(f"{message.author.mention} {sticks_result}")
 
         if user_msg[0] == '!':

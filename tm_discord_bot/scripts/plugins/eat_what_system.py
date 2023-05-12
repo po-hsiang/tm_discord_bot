@@ -1,5 +1,5 @@
-from tm_discord_bot.scripts.google_sheet_utils import GoogleSheetUtils
-from tm_discord_bot.scripts.config_utils import read_config_file
+from google_sheet_utils import GoogleSheetUtils
+from config_utils import read_config_file
 import random
 
 CONFIG = read_config_file()

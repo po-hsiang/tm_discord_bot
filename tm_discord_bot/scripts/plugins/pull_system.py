@@ -1,18 +1,21 @@
 import random
 
 
-def pull_a_sticks():
-    black = "<:tmStaringBlack:1049667815168286751>"
-    yellow = "<:tmStaring:1000029916953333760>"
-    rainbow = "<:tmStaringRainbow:1049668332766367804>"
-    luck_sticks = [black, yellow, rainbow]
-    weights = [94.3, 5.1, 0.6]
-    results = random.choices(luck_sticks, weights=weights, k=10)
-    if yellow not in results or rainbow not in results:
-        results.pop()
-        results.append(yellow)
-    return ' '.join(results)
+class PullSystem():
+    def __init__(self):
+        self.black = "<:tmStaringBlack:1049667815168286751>"
+        self.yellow = "<:tmStaring:1000029916953333760>"
+        self.rainbow = "<:tmStaringRainbow:1049668332766367804>"
+        self.luck_sticks = [self.black, self.yellow, self.rainbow]
+        self.weights = [94.3, 5.1, 0.6]
 
+    def pull_a_sticks(self):
+        results = random.choices(self.luck_sticks, weights=self.weights, k=10)
+        results = self.__guaranteed_mechanism(results)
+        return ' '.join(results)
 
-if __name__ == "__main__":
-    print(pull_a_sticks())
+    def __guaranteed_mechanism(self, results):
+        if self.yellow not in results and self.rainbow not in results:
+            results.pop()
+            results.append(self.yellow)
+        return results

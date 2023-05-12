@@ -1,4 +1,4 @@
-from tm_discord_bot.scripts.config_utils import read_config_file
+from config_utils import read_config_file
 import openai
 
 CONFIG = read_config_file()

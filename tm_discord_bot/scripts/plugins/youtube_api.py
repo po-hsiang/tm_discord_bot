@@ -1,5 +1,5 @@
 from googleapiclient.discovery import build
-from tm_discord_bot.scripts.config_utils import read_config_file
+from config_utils import read_config_file
 import random
 
 CONFIG = read_config_file()
