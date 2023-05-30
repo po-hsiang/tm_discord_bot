@@ -5,12 +5,16 @@ import random
 CONFIG = read_config_file()
 
 
-class WhatToEat():
+class EatWhatSystem:
     def __init__(self):
         gsheets_app = GoogleSheetUtils.init_spreadsheet_api()
         spread_sheet = gsheets_app.open_by_url(CONFIG.get("what_to_eat_url"))
         ws = spread_sheet.worksheet_by_title("工作表1")
-        raw_data = ws.get_all_values(majdim="COLUMNS", include_tailing_empty_rows=False, include_tailing_empty=False)
+        raw_data = ws.get_all_values(
+            majdim="COLUMNS",
+            include_tailing_empty_rows=False,
+            include_tailing_empty=False,
+        )
         self.total_answers_list = list()
         self.meal_commend_list = ["吃啥", "吃"]
         self.meal_dict = dict()

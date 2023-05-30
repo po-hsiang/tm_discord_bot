@@ -1,7 +1,7 @@
 import random
 
 
-class PullSystem():
+class PullSystem:
     def __init__(self):
         self.black = "<:tmStaringBlack:1049667815168286751>"
         self.yellow = "<:tmStaring:1000029916953333760>"
@@ -12,7 +12,7 @@ class PullSystem():
     def pull_a_sticks(self):
         results = random.choices(self.luck_sticks, weights=self.weights, k=10)
         results = self.__guaranteed_mechanism(results)
-        return ' '.join(results)
+        return " ".join(results)
 
     def __guaranteed_mechanism(self, results):
         if self.yellow not in results and self.rainbow not in results:

@@ -56,9 +56,9 @@ class TwoChoicesOneSystem:
         self.round += 1
 
     def _get_winner(self, user_msg):
-        if user_msg in ['左', 'A', 'a']:
+        if user_msg in ["左", "A", "a"]:
             return self.candidate1
-        elif user_msg in ['右', 'B', 'b']:
+        elif user_msg in ["右", "B", "b"]:
             return self.candidate2
         else:
             return None

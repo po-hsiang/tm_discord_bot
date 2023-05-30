@@ -18,19 +18,18 @@ class YouTubeAPIHandler:
         next_page_token = None
         while True:
             pl_request = youtube.playlistItems().list(
-                part='contentDetails',
+                part="contentDetails",
                 playlistId=playlist_id,
                 maxResults=50,
-                pageToken=next_page_token
+                pageToken=next_page_token,
             )
             pl_response = pl_request.execute()
             vid_ids = []
             for item in pl_response["items"]:
-                vid_ids.append(item['contentDetails']['videoId'])
+                vid_ids.append(item["contentDetails"]["videoId"])
 
             vid_request = youtube.videos().list(
-                part="snippet,statistics",
-                id=",".join(vid_ids)
+                part="snippet,statistics", id=",".join(vid_ids)
             )
             vid_response = vid_request.execute()
             for item in vid_response["items"]:
@@ -42,10 +41,10 @@ class YouTubeAPIHandler:
                     {
                         "views": int(vid_views),
                         "url": yt_link,
-                        "title": item['snippet']['title']
+                        "title": item["snippet"]["title"],
                     }
                 )
-            next_page_token = pl_response.get('nextPageToken')
+            next_page_token = pl_response.get("nextPageToken")
             if not next_page_token:
                 break
 
@@ -71,7 +70,7 @@ class YouTubeAPIHandler:
 
         result = ""
         for song in self.song_list:
-            if check_song_title in song['title']:
+            if check_song_title in song["title"]:
                 have_checked = True
                 count += 1
                 result += f"{count}. {song['title']}\n"

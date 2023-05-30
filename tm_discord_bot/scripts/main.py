@@ -1,8 +1,8 @@
 from plugins.two_choices_one_system import TwoChoicesOneSystem
 from plugins.youtube_api import YouTubeAPIHandler
-from plugins.eat_what_system import WhatToEat
+from plugins.eat_what_system import EatWhatSystem
 from plugins.pull_system import PullSystem
-from plugins.openai_api import OpenAI_API
+from plugins.openai_api import OpenaiAPI
 from config_utils import read_config_file
 import discord
 
@@ -12,9 +12,9 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-what_to_eat = WhatToEat()
+what_to_eat = EatWhatSystem()
 yt_song = YouTubeAPIHandler()
-chat_gpt = OpenAI_API()
+chat_gpt = OpenaiAPI()
 two_choice_game = TwoChoicesOneSystem(what_to_eat.total_answers_list)
 pull_system = PullSystem()
 
@@ -36,8 +36,8 @@ async def on_message(message):
         user_msg = message.content
 
         # 轉換全形驚嘆號
-        if '！' in user_msg:
-            user_msg = user_msg.replace('！', '!')
+        if "！" in user_msg:
+            user_msg = user_msg.replace("！", "!")
 
         # 二選一
         if two_choice_game.is_running:
@@ -69,7 +69,7 @@ async def on_message(message):
             sticks_result = pull_system.pull_a_sticks()
             await message.channel.send(f"{message.author.mention} {sticks_result}")
 
-        if user_msg[0] == '!':
+        if user_msg[0] == "!":
             check_meal = user_msg.replace("!", "")
             if check_meal in what_to_eat.get_meal_commend_list():
                 meal = what_to_eat.choose_one_meal(check_meal)
@@ -77,7 +77,9 @@ async def on_message(message):
 
         if user_msg in SONG_COMMAND_LIST:
             song = yt_song.choose_one_song()
-            await message.channel.send(f"從虎喵的歌單內隨機挑了這首歌給 {message.author.mention} \n {song}")
+            await message.channel.send(
+                f"從虎喵的歌單內隨機挑了這首歌給 {message.author.mention} \n {song}"
+            )
 
         if user_msg[0:4] == "!查歌單":
             result = yt_song.check_song_title(user_msg[5:])
