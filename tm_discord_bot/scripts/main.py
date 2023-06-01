@@ -1,6 +1,7 @@
 from plugins.two_choices_one_system import TwoChoicesOneSystem
 from plugins.youtube_api import YouTubeAPIHandler
 from plugins.eat_what_system import EatWhatSystem
+from plugins.remind_system import start_reminders
 from plugins.pull_system import PullSystem
 from plugins.openai_api import OpenaiAPI
 from config_utils import read_config_file
@@ -24,6 +25,7 @@ SONG_COMMAND_LIST = ["!聽", "!歌", "!聽歌", "!listen", "!song"]
 @client.event
 async def on_ready():
     print(f"機器人「{client.user}」已上線。")
+    start_reminders(client, chat_gpt, yt_song)  # 啟動鬧鐘功能
 
 
 @client.event
@@ -32,7 +34,10 @@ async def on_message(message):
         # 忽略機器人自己的發言 ☆㊣⤦虎喵小粉絲➷㊣❥#4703
         return
 
-    if message.channel.name == "【虎喵小粉絲🎰】" and len(message.content) > 0:
+    if (
+        message.channel.id == CONFIG.get("assistant_channel_id")
+        and len(message.content) > 0
+    ):
         user_msg = message.content
 
         # 轉換全形驚嘆號
