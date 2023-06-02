@@ -83,7 +83,7 @@ async def on_message(message):
         if user_msg in SONG_COMMAND_LIST:
             song = yt_song.choose_one_song()
             await message.channel.send(
-                f"從虎喵的歌單內隨機挑了這首歌給 {message.author.mention} \n {song}"
+                f"從虎喵的歌單內隨機挑了這首歌給 {message.author.mention} \n {song} "
             )
 
         if user_msg[0:4] == "!查歌單":

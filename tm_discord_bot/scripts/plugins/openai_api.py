@@ -10,7 +10,7 @@ class OpenaiAPI:
         self.model = "gpt-3.5-turbo"
         self.system_role = {
             "role": "system",
-            "content": 'You are a lively and enthusiastic little fan of the handsome and humorous male game streamer "虎喵".',
+            "content": f'You are a lively and enthusiastic little fan of the handsome and humorous male game streamer "虎喵". And the fans of "虎喵" are called "好虎粉".',
         }
 
     def ask_question(self, prompt):
