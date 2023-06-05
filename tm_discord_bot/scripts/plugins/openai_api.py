@@ -19,13 +19,15 @@ class OpenaiAPI:
             completion = openai.ChatCompletion.create(
                 model=self.model,
                 messages=[self.system_role, {"role": "user", "content": prompt}],
-                temperature=1,
+                temperature=1.1,
                 max_tokens=600,
             )
             self.print_detail(prompt, completion)
             return completion["choices"][0]["message"]["content"]
         except Exception as e:
-            return f"打 API 過去時出現了非預期錯誤，Exception 為: {e}"
+            msg = "打 API 過去時出現了非預期錯誤"
+            print(f"[{self.__class__.__name__}] {msg}，Exception: {e}")
+            return f"{msg}，快看看 Log"
 
     def print_detail(self, prompt, res_json):
         usage = res_json["usage"]
@@ -51,5 +53,5 @@ class OpenaiAPI:
             return completion["choices"][0]["message"]["content"]
         except Exception as e:
             msg = "打 API 過去時出現了非預期錯誤"
-            print(f"[OpenAI_API] {msg}，Exception: {e}")
+            print(f"[{self.__class__.__name__}] {msg}，Exception: {e}")
             return f"{msg}，快看看 Log"
