@@ -53,6 +53,7 @@ class YouTubeAPIHandler:
                 break
 
         videos.sort(key=lambda vid: vid["views"], reverse=True)
+        videos.sort(key=lambda vid: (vid["channel"], vid["title"]))
         return videos
 
     def choose_one_song(self):
