@@ -7,6 +7,9 @@ CONFIG = read_config_file()
 
 class YouTubeAPIHandler:
     def __init__(self):
+        self.song_list = self.__sort_yt_playlist()
+
+    def __sort_yt_playlist(self):
         api_key = CONFIG.get("youtube_developer_key")
 
         youtube = build("youtube", "v3", developerKey=api_key)
@@ -42,6 +45,7 @@ class YouTubeAPIHandler:
                         "views": int(vid_views),
                         "url": yt_link,
                         "title": item["snippet"]["title"],
+                        "channel": item["snippet"]["channelTitle"],
                     }
                 )
             next_page_token = pl_response.get("nextPageToken")
@@ -49,33 +53,43 @@ class YouTubeAPIHandler:
                 break
 
         videos.sort(key=lambda vid: vid["views"], reverse=True)
-
-        # for index, video in enumerate(videos):
-        #     print(f"{index + 1} video: {video['url']}, views: {video['views']}, 歌名: {video['title']}")
-        # print(f"total: {len(videos)}")
-
-        self.song_list = videos
+        return videos
 
     def choose_one_song(self):
         song = random.choice(self.song_list)
         return song["url"]
 
-    def check_song_title(self, check_song_title):
-        print(f"check_song_title: {check_song_title}")
-        if len(check_song_title) < 2:
-            return f"搜尋請大於等於2個字"
+    def search_keyword_in_song_list(self, keyword):
+        if len(keyword) < 2:
+            return [f"搜尋請大於等於2個字"]
+        matched_songs = [
+            song for song in self.song_list if self.__is_keyword_matched(song, keyword)
+        ]
+        count = len(matched_songs)
+        answer = self.__generate_song_list_response(matched_songs)
+        return self.__generate_search_result_message(keyword, count, answer)
 
-        have_checked = False
-        count = 0
+    def __is_keyword_matched(self, song, keyword):
+        title = song["title"].lower()
+        channel = song["channel"].lower()
+        keyword = keyword.lower()
+        return keyword in title or keyword in channel
 
+    def __generate_song_list_response(self, songs):
         result = ""
-        for song in self.song_list:
-            if check_song_title in song["title"]:
-                have_checked = True
-                count += 1
-                result += f"{count}. {song['title']}\n"
+        answer = []
+        for index, song in enumerate(songs):
+            current_song = f"{index + 1}.《{song['channel']}》{song['title']}\n"
+            temp_result = result + current_song
+            if len(temp_result) >= 1900:
+                answer.append(result)
+                result = ""
+            result += current_song
+        if result:
+            answer.append(result)
+        return answer
 
-        if have_checked:
-            return f"虎喵歌單內標題含有「{check_song_title}」的歌共有{count}首：\n" + result
-        else:
-            return f"虎喵歌單內的歌標題都沒有「{check_song_title}」字元"
+    def __generate_search_result_message(self, keyword, count, answer):
+        if answer:
+            answer[0] = f"歌單內標題含有「{keyword}」的歌共有{count}首：\n" + answer[0]
+        return answer

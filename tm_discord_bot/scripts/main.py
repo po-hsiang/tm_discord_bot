@@ -87,8 +87,20 @@ async def on_message(message):
             )
 
         if user_msg[0:4] == "!查歌單":
-            result = yt_song.check_song_title(user_msg[5:])
-            await message.channel.send(f"{message.author.mention} {result}")
+            keyword = user_msg[5:]
+            results = yt_song.search_keyword_in_song_list(keyword)
+            if results:
+                for index, result in enumerate(results):
+                    if index == 0:
+                        await message.channel.send(
+                            f"{message.author.mention}\n{result}"
+                        )
+                    else:
+                        await message.channel.send(result)
+            else:
+                await message.channel.send(
+                    f"{message.author.mention}\n歌單內的歌標題都沒有「{keyword}」字元"
+                )
 
 
 if __name__ == "__main__":
