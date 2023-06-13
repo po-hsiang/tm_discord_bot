@@ -4,6 +4,7 @@ from plugins.eat_what_system import EatWhatSystem
 from plugins.remind_system import start_reminders
 from plugins.pull_system import PullSystem
 from plugins.openai_api import OpenaiAPI
+from plugins.auto_reply_system import AutoReplySystem
 from config_utils import read_config_file
 import discord
 
@@ -18,6 +19,7 @@ yt_song = YouTubeAPIHandler()
 chat_gpt = OpenaiAPI()
 two_choice_game = TwoChoicesOneSystem(what_to_eat.total_answers_list)
 pull_system = PullSystem()
+auto_reply_system = AutoReplySystem()
 
 SONG_COMMAND_LIST = ["!聽", "!歌", "!聽歌", "!listen", "!song"]
 
@@ -44,6 +46,10 @@ async def on_message(message):
         if "！" in user_msg:
             user_msg = user_msg.replace("！", "!")
 
+        answer = auto_reply_system.get_reply(user_msg)
+        if answer:
+            await message.channel.send(f"{message.author.mention}\n{answer}")
+
         # 二選一
         if two_choice_game.is_running:
             result = two_choice_game.play(user_msg)
@@ -53,26 +59,6 @@ async def on_message(message):
             result = two_choice_game.start_game()
             if result:
                 await message.channel.send(f"{result}")
-
-        if user_msg[0:2] == "!問":
-            answer = chat_gpt.ask_question(user_msg[3:])
-            await message.channel.send(f"{message.author.mention}\n{answer}")
-        elif user_msg[0:4] == "!gpt":
-            answer = chat_gpt.ask_question(user_msg[5:])
-            await message.channel.send(f"{message.author.mention}\n{answer}")
-        elif user_msg[0:3] == "!搜圖":
-            answer = chat_gpt.search_keywords_image(user_msg[4:])
-            await message.channel.send(f"{message.author.mention}\n{answer}")
-
-        if user_msg == "!心結":
-            await message.channel.send(f"{message.author.mention} 沒有心結啦! 哪次心結了?")
-
-        if user_msg == "!新垣結衣":
-            await message.channel.send(f"{message.author.mention} 她已婚QQ")
-
-        if user_msg == "!抽":
-            sticks_result = pull_system.pull_a_sticks()
-            await message.channel.send(f"{message.author.mention} {sticks_result}")
 
         if user_msg[0] == "!":
             check_meal = user_msg.replace("!", "")
