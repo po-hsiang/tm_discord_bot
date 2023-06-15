@@ -1,8 +1,6 @@
-from plugins.two_choices_one_system import TwoChoicesOneSystem
 from plugins.youtube_api import YouTubeAPIHandler
 from plugins.eat_what_system import EatWhatSystem
 from plugins.remind_system import start_reminders
-from plugins.pull_system import PullSystem
 from plugins.openai_api import OpenaiAPI
 from plugins.auto_reply_system import AutoReplySystem
 from config_utils import read_config_file
@@ -17,8 +15,6 @@ client = discord.Client(intents=intents)
 what_to_eat = EatWhatSystem()
 yt_song = YouTubeAPIHandler()
 chat_gpt = OpenaiAPI()
-two_choice_game = TwoChoicesOneSystem(what_to_eat.total_answers_list)
-pull_system = PullSystem()
 auto_reply_system = AutoReplySystem()
 
 SONG_COMMAND_LIST = ["!聽", "!歌", "!聽歌", "!listen", "!song"]
@@ -36,9 +32,12 @@ async def on_message(message):
         # 忽略機器人自己的發言 ☆㊣⤦虎喵小粉絲➷㊣❥#4703
         return
 
-    if (
-        message.channel.id == CONFIG.get("assistant_channel_id")
-        and len(message.content) > 0
+    if len(message.content) <= 0:
+        return
+
+    channel_id = message.channel.id
+    if (channel_id == CONFIG.get("assistant_channel_id")) or (
+        channel_id == CONFIG.get("test_channel_id")
     ):
         user_msg = message.content
 
@@ -49,16 +48,6 @@ async def on_message(message):
         answer = auto_reply_system.get_reply(user_msg)
         if answer:
             await message.channel.send(f"{message.author.mention}\n{answer}")
-
-        # 二選一
-        if two_choice_game.is_running:
-            result = two_choice_game.play(user_msg)
-            if result:
-                await message.channel.send(f"{result}")
-        elif user_msg == "!21":
-            result = two_choice_game.start_game()
-            if result:
-                await message.channel.send(f"{result}")
 
         if user_msg[0] == "!":
             check_meal = user_msg.replace("!", "")

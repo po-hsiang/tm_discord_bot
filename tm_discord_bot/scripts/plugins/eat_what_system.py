@@ -21,13 +21,14 @@ class EatWhatSystem:
         for columns in raw_data:
             meal_type = ""
             for index, value in enumerate(columns):
-                if index == 0:
-                    meal_type = value
-                    self.meal_dict[meal_type] = list()
-                    self.meal_commend_list.append(meal_type)
-                else:
-                    self.total_answers_list.append(value)
-                    self.meal_dict[meal_type].append(value)
+                if value:
+                    if index == 0:
+                        meal_type = value
+                        self.meal_dict[meal_type] = list()
+                        self.meal_commend_list.append(meal_type)
+                    else:
+                        self.total_answers_list.append(value)
+                        self.meal_dict[meal_type].append(value)
 
     def get_meal_commend_list(self):
         return self.meal_commend_list

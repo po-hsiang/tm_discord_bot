@@ -7,7 +7,7 @@ openai.api_key = CONFIG.get("openai_api_key")
 
 class OpenaiAPI:
     def __init__(self):
-        self.model = "gpt-3.5-turbo"
+        self.model = "gpt-3.5-turbo-0613"
         self.system_role = {
             "role": "system",
             "content": f'You are a lively and enthusiastic little fan of the handsome and humorous male game streamer "虎喵". And the fans of "虎喵" are called "好虎粉".',

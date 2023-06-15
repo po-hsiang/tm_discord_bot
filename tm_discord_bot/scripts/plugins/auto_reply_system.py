@@ -1,6 +1,8 @@
 from .youtube_api import YouTubeAPIHandler
 from .pull_system import PullSystem
 from .openai_api import OpenaiAPI
+from .eat_what_system import EatWhatSystem
+from .two_choices_one_system import TwoChoicesOneSystem
 
 
 class AutoReplySystem:
@@ -8,6 +10,8 @@ class AutoReplySystem:
         self.yt_song = YouTubeAPIHandler()
         pull_system = PullSystem()
         chat_gpt = OpenaiAPI()
+        what_to_eat = EatWhatSystem()
+        self.two_choice_game = TwoChoicesOneSystem(what_to_eat.total_answers_list)
         self.song_command_list = ["!聽", "!歌", "!聽歌", "!listen", "!song"]
         self.str_command = {
             "!心結": "沒有心結啦！哪次心結了？\n然後新垣結衣已婚QQ",
@@ -32,4 +36,6 @@ class AutoReplySystem:
             func = self.func_command[cmd]
             if callable(func):
                 return func(*args, **kwargs)
+        else:
+            return self.two_choice_game.play_or_start_game(msg)
         return ""

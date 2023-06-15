@@ -11,25 +11,30 @@ class TwoChoicesOneSystem:
         self.winners = []
         self.next_winners = []
 
-    def start_game(self):
+    def play_or_start_game(self, user_msg):
         if self.is_running:
-            print("二選一遊戲已經開始了！")
-            return
+            return self.__play(user_msg)
+        elif user_msg == "!21":
+            return self.__start_game()
+
+    def __start_game(self):
         self.is_running = True
         self.winners = random.sample(self.candidates, 16)
         self.stage = len(self.winners).bit_length() - 1
         self.__get_current_candidate()
         return f"總共有 {len(self.winners)} 個候選人！\n" + self.__get_response()
 
-    def play(self, user_msg):
+    def __play(self, user_msg):
         winner = self._get_winner(user_msg)
         if winner:
+            result = f"你選擇了{winner}\n"
             self.next_winners.append(winner)
             if self.stage >= 2:
                 if self.candidate_index < len(self.winners):
+                    # 回合中
                     self.__get_current_candidate()
-                    return self.__get_response()
                 else:
+                    # 同一強最後一回合
                     self.winners = self.next_winners.copy()
                     random.shuffle(self.winners)
                     self.next_winners = []
@@ -37,11 +42,11 @@ class TwoChoicesOneSystem:
                     self.round = 0
                     self.candidate_index = 0
                     self.__get_current_candidate()
-                    return self.__get_response()
+                return result + self.__get_response()
             else:
                 if self.candidate_index < len(self.winners):
                     self.__get_current_candidate()
-                    return self.__get_response()
+                    return result + self.__get_response()
                 else:
                     self.__reset_game()
                     return f"恭喜「{winner}」成為冠軍！"
@@ -65,7 +70,7 @@ class TwoChoicesOneSystem:
 
     def __get_response(self):
         if self.stage >= 2:
-            response = f"{2 ** self.stage} 強淘汰賽 Round {self.round}，請輸入左或右"
+            response = f"{2 ** self.stage} 強淘汰賽 Round {self.round}，請輸入 左(A) 或 右(B)"
         else:
             response = f"總冠軍賽！請輸入左、右選出冠軍！"
         return response + f"\n{self.candidate1} vs {self.candidate2}"
