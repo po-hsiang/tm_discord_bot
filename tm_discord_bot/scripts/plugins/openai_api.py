@@ -44,7 +44,7 @@ class OpenaiAPI:
             keyword = kwargs.get("question")
             if len(keyword) == 0:
                 return f"請輸入搜圖關鍵字"
-            prompt = f"請先幫我把待會的關鍵字翻譯成英文(不用回答我)，只需要用這個英文去當新的關鍵字並回覆我一張和關鍵字有相關的圖片，只需要給圖片就好，顯示圖片時請使用 markdown 語法 [<關鍵詞>](https://source.unsplash.com/1280x720/?<關鍵詞>)，這次的關鍵詞是「{keyword}」。"
+            prompt = f"請先幫我把待會的關鍵字翻譯成英文(不用回答我)，只需要用這個英文去當新的關鍵字並回覆我一張和關鍵字有相關的圖片，只需要給圖片就好，顯示圖片時請使用 markdown 語法 [關鍵詞](https://source.unsplash.com/1280x720/?英文關鍵詞)，這次的原文關鍵詞是「{keyword}」。"
             completion = openai.ChatCompletion.create(
                 model=self.model,
                 messages=[self.system_role, {"role": "user", "content": prompt}],
