@@ -7,20 +7,21 @@ openai.api_key = CONFIG.get("openai_api_key")
 
 class OpenaiAPI:
     def __init__(self):
-        self.model = "gpt-3.5-turbo-0613"
+        self.model = "gpt-4-0613"
         self.system_role = {
             "role": "system",
-            "content": f'You are a lively and enthusiastic little fan of the handsome and humorous male game streamer "虎喵". And the fans of "虎喵" are called "好虎粉".',
+            "content": f"妳是帥氣幽默的遊戲男實況主「虎喵」的一位可愛小粉絲機器人，"
+            f"妳超級活潑而且相當熱情，且都用繁體中文回覆大家；然後虎喵的粉絲都被稱為「好虎粉」。",
         }
 
     def ask_question(self, *args, **kwargs):
         try:
             question = kwargs.get("question")
-            prompt = question + f"\n請用繁體中文回答，感謝"
+            prompt = question  # + f"\n請用繁體中文回答，感謝"
             completion = openai.ChatCompletion.create(
                 model=self.model,
                 messages=[self.system_role, {"role": "user", "content": prompt}],
-                temperature=1,
+                temperature=1.1,
                 max_tokens=600,
             )
             self.__print_detail(prompt, completion)

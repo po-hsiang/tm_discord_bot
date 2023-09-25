@@ -1,6 +1,6 @@
 from plugins.youtube_api import YouTubeAPIHandler
 from plugins.eat_what_system import EatWhatSystem
-from plugins.remind_system import start_reminders
+from plugins.remind_system import RemindSystem
 from plugins.openai_api import OpenaiAPI
 from plugins.auto_reply_system import AutoReplySystem
 from config_utils import read_config_file
@@ -23,7 +23,8 @@ SONG_COMMAND_LIST = ["!聽", "!歌", "!聽歌", "!listen", "!song"]
 @client.event
 async def on_ready():
     print(f"機器人「{client.user}」已上線。")
-    start_reminders(client, chat_gpt, yt_song)  # 啟動鬧鐘功能
+    reminder_system = RemindSystem(client, chat_gpt, yt_song)
+    reminder_system.start()  # 啟動鬧鐘功能，定時提醒
 
 
 @client.event
