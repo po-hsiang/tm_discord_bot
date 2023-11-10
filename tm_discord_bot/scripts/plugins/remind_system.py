@@ -57,7 +57,7 @@ class RemindSystem:
         question = f"早安，現在時間是{week_list[weekday]}{time_str}，你可以給各位好虎粉一個熱情且活力的早安招呼語嗎？不用特別提到虎喵，你只需祝福好虎粉就好，請用40字以內回答"
         answer = self.chat_gpt.ask_question(question=question)
         song = self.yt_song_chooser.choose_one_song()
-        morning_greeting = f"{answer}\n最後為大家送上本日好歌推推： \n {song} "
+        morning_greeting = f"{answer}\n [最後為大家送上本日好歌推推]({song}) "
         return morning_greeting
 
     def start(self):

@@ -7,25 +7,32 @@ openai.api_key = CONFIG.get("openai_api_key")
 
 class OpenaiAPI:
     def __init__(self):
-        self.model = "gpt-4-0613"
+        self.model = CONFIG.get("openai_model")
+        self.token_limit = self.__get_token_limit()
         self.system_role = {
             "role": "system",
             "content": f"妳是帥氣幽默的遊戲男實況主「虎喵」的一位可愛小粉絲機器人，"
             f"妳超級活潑而且相當熱情，且都用繁體中文回覆大家；然後虎喵的粉絲都被稱為「好虎粉」。",
         }
+        self.history_msg = [
+            self.system_role,
+        ]
 
     def ask_question(self, *args, **kwargs):
         try:
-            question = kwargs.get("question")
-            prompt = question  # + f"\n請用繁體中文回答，感謝"
+            prompt = kwargs.get("question")
+            self.history_msg.append({"role": "user", "content": prompt})
             completion = openai.ChatCompletion.create(
                 model=self.model,
-                messages=[self.system_role, {"role": "user", "content": prompt}],
+                messages=self.history_msg,
                 temperature=1.1,
-                max_tokens=600,
             )
             self.__print_detail(prompt, completion)
-            return completion["choices"][0]["message"]["content"]
+            answer = completion["choices"][0]["message"]["content"]
+            self.history_msg.append({"role": "assistant", "content": answer})
+            for index, msg in enumerate(self.history_msg):
+                print(f"{index}: {msg}")
+            return answer
         except Exception as e:
             msg = "打 API 過去時出現了非預期錯誤"
             print(f"[{self.__class__.__name__}] {msg}，Exception: {e}")
@@ -35,10 +42,27 @@ class OpenaiAPI:
         usage = res_json["usage"]
         answer = res_json["choices"][0]["message"]["content"]
         print(
-            f"[Tokens] 總共:{usage['total_tokens']} 提問:{usage['prompt_tokens']} 回答:{usage['completion_tokens']}"
+            f"\n[Tokens] 總共:{usage['total_tokens']} 提問:{usage['prompt_tokens']} 回答:{usage['completion_tokens']}"
         )
         print(f"Q: {prompt}")
         print(f"A: {answer}\n")
+
+        if usage["total_tokens"] > self.token_limit:
+            self.history_msg.pop(1)
+            self.history_msg.pop(1)
+
+    def __get_token_limit(self):
+        max_token = {
+            "gpt-4-1106-preview": 128000,
+            "gpt-4-32k": 32768,
+            "gpt-4": 8192,
+            "gpt-3.5-turbo-1106": 16385,
+            "gpt-3.5-turbo-16k": 16385,
+            "gpt-3.5-turbo": 4096,
+        }
+        if self.model not in max_token.keys():
+            raise Exception(f"不支援 model {self.model}")
+        return int(max_token[self.model] / 2)
 
     def search_keyword_image(self, *args, **kwargs):
         try:
@@ -50,7 +74,6 @@ class OpenaiAPI:
                 model=self.model,
                 messages=[self.system_role, {"role": "user", "content": prompt}],
                 temperature=0,
-                max_tokens=600,
             )
             self.__print_detail(prompt, completion)
             return completion["choices"][0]["message"]["content"]
