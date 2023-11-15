@@ -1,5 +1,6 @@
 from config_utils import read_config_file
 import openai
+import time
 
 CONFIG = read_config_file()
 openai.api_key = CONFIG.get("openai_api_key")
@@ -19,24 +20,35 @@ class OpenaiAPI:
         ]
 
     def ask_question(self, *args, **kwargs):
-        try:
-            prompt = kwargs.get("question")
-            self.history_msg.append({"role": "user", "content": prompt})
-            completion = openai.ChatCompletion.create(
-                model=self.model,
-                messages=self.history_msg,
-                temperature=1.1,
-            )
-            self.__print_detail(prompt, completion)
-            answer = completion["choices"][0]["message"]["content"]
-            self.history_msg.append({"role": "assistant", "content": answer})
-            for index, msg in enumerate(self.history_msg):
-                print(f"{index}: {msg}")
-            return answer
-        except Exception as e:
-            msg = "打 API 過去時出現了非預期錯誤"
-            print(f"[{self.__class__.__name__}] {msg}，Exception: {e}")
-            return f"{msg}，快看看 Log"
+        max_retries = 3
+        retry_count = 0
+        while retry_count < max_retries:
+            try:
+                prompt = kwargs.get("question")
+                self.history_msg.append({"role": "user", "content": prompt})
+
+                completion = openai.ChatCompletion.create(
+                    model=self.model,
+                    messages=self.history_msg,
+                    temperature=1.1,
+                )
+
+                self.__print_detail(prompt, completion)
+                answer = completion["choices"][0]["message"]["content"]
+                self.history_msg.append({"role": "assistant", "content": answer})
+
+                print("目前有的歷史訊息：")
+                for index, msg in enumerate(self.history_msg):
+                    print(f"{index}: {msg}")
+
+                return answer
+
+            except Exception as e:
+                retry_count += 1
+                msg = f"打 API 過去時出現了非預期錯誤，接下來進行第 {retry_count} 次重試"
+                print(f"[{self.__class__.__name__}] {msg}，Exception: {e}")
+                time.sleep(2)
+        return f"無法成功打 API，已達到最大重試次數，快看看 Log"
 
     def __print_detail(self, prompt, res_json):
         usage = res_json["usage"]
@@ -47,6 +59,7 @@ class OpenaiAPI:
         print(f"Q: {prompt}")
         print(f"A: {answer}\n")
 
+        # 當超過這次打 API 超過 token 限制則 pop 掉後面的兩則訊息
         if usage["total_tokens"] > self.token_limit:
             self.history_msg.pop(1)
             self.history_msg.pop(1)
