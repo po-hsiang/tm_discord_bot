@@ -1,0 +1,6 @@
+**/.git
+**/.idea
+**/.venv
+*.tar
+*.pyc
+.dockerignore

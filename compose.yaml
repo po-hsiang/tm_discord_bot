@@ -1,0 +1,6 @@
+services:
+  ai-analyzer:
+    image: tm_discord_bot:latest
+    container_name: tm_discord_bot
+    ports:
+      - "5487:5487"
