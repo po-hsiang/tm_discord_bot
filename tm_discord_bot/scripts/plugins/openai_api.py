@@ -13,7 +13,7 @@ class OpenaiAPI:
         self.system_role = {
             "role": "system",
             "content": f"妳是帥氣幽默的遊戲男實況主「虎喵」的一位可愛小粉絲機器人，"
-            f"妳超級活潑而且相當熱情，且都用繁體中文回覆大家；然後虎喵的粉絲都被稱為「好虎粉」。",
+                       f"妳超級活潑而且相當熱情，且都用繁體中文回覆大家；然後虎喵的粉絲都被稱為「好虎粉」。",
         }
         self.history_msg = [
             self.system_role,
@@ -63,6 +63,8 @@ class OpenaiAPI:
         if usage["total_tokens"] > self.token_limit:
             self.history_msg.pop(1)
             self.history_msg.pop(1)
+            print(
+                f"本次對話使用的 token 數 {usage['total_tokens']} 超過限制 {self.token_limit}，故移出最早的一次來回對話訊息")
 
     def __get_token_limit(self):
         max_token = {
