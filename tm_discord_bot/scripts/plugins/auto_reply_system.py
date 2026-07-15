@@ -6,12 +6,14 @@ from .two_choices_one_system import TwoChoicesOneSystem
 
 
 class AutoReplySystem:
-    def __init__(self):
-        self.yt_song = YouTubeAPIHandler()
+    def __init__(self, yt_song=None, chat_gpt=None, what_to_eat=None):
+        # 可由外部（main.py）注入共用實例，避免重複建立：
+        # 歌單不用抓兩次、GPT 對話歷史不會分裂成兩套
+        self.yt_song = yt_song if yt_song is not None else YouTubeAPIHandler()
+        chat_gpt = chat_gpt if chat_gpt is not None else OpenaiAPI()
+        what_to_eat = what_to_eat if what_to_eat is not None else EatWhatSystem()
         pull_system = PullSystem()
-        chat_gpt = OpenaiAPI()
-        what_to_eat = EatWhatSystem()
-        self.two_choice_game = TwoChoicesOneSystem(what_to_eat.total_answers_list)
+        self.two_choice_game = TwoChoicesOneSystem(what_to_eat.get_total_answers_list)
         self.song_command_list = ["!聽", "!歌", "!聽歌", "!listen", "!song"]
         self.str_command = {
             "!心結": "沒有心結啦！哪次心結了？\n然後新垣結衣已婚QQ",

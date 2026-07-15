@@ -4,10 +4,22 @@ import random
 
 CONFIG = read_config_file()
 
+LOAD_FAIL_MESSAGE = "歌單暫時載入失敗，請稍後再試 🙏"
+
 
 class YouTubeAPIHandler:
     def __init__(self):
-        self.song_list = self.__sort_yt_playlist()
+        # 延遲載入：啟動時不抓歌單，首次使用（或 on_ready 預載）時才載入，
+        # YouTube API 故障時機器人仍可啟動，僅點歌功能暫時降級
+        self.song_list = []
+
+    def ensure_loaded(self):
+        if not self.song_list:
+            try:
+                self.song_list = self.__sort_yt_playlist()
+            except Exception as e:
+                print(f"[{self.__class__.__name__}] 載入 YouTube 歌單失敗，之後使用時會再重試：{e}")
+        return bool(self.song_list)
 
     def __sort_yt_playlist(self):
         api_key = CONFIG.get("youtube_developer_key")
@@ -57,12 +69,16 @@ class YouTubeAPIHandler:
         return videos
 
     def choose_one_song(self):
+        if not self.ensure_loaded():
+            return LOAD_FAIL_MESSAGE
         song = random.choice(self.song_list)
         return song["url"]
 
     def search_keyword_in_song_list(self, keyword):
         if len(keyword) < 2:
             return [f"搜尋請大於等於2個字"]
+        if not self.ensure_loaded():
+            return [LOAD_FAIL_MESSAGE]
         matched_songs = [
             song for song in self.song_list if self.__is_keyword_matched(song, keyword)
         ]

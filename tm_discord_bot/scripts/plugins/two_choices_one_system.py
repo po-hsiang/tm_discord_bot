@@ -2,8 +2,10 @@ import random
 
 
 class TwoChoicesOneSystem:
-    def __init__(self, candidates):
-        self.candidates = candidates
+    def __init__(self, candidates_provider):
+        # candidates_provider 可為 list，或回傳 list 的 callable（配合延遲載入，
+        # 開局當下才取得最新候選清單）
+        self.candidates_provider = candidates_provider
         self.is_running = False
         self.stage = 0
         self.round = 0
@@ -18,8 +20,15 @@ class TwoChoicesOneSystem:
             return self.__start_game()
 
     def __start_game(self):
+        candidates = (
+            self.candidates_provider()
+            if callable(self.candidates_provider)
+            else self.candidates_provider
+        )
+        if len(candidates) < 16:
+            return "候選清單目前不足 16 個（可能資料載入失敗），請稍後再試 🙏"
         self.is_running = True
-        self.winners = random.sample(self.candidates, 16)
+        self.winners = random.sample(candidates, 16)
         self.stage = len(self.winners).bit_length() - 1
         self.__get_current_candidate()
         return f"總共有 {len(self.winners)} 個候選人！\n" + self.__get_response()

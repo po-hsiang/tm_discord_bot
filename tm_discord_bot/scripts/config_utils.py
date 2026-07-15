@@ -3,7 +3,8 @@ import json
 
 
 def read_config_file():
-    config_path = Path(__file__).parent.parent / "json" / "config.json"  # 設定檔 config.json 的路徑
+    # 設定檔 config.json 的路徑（resolve() 轉絕對路徑，避免相對匯入時解析到錯誤位置）
+    config_path = Path(__file__).resolve().parent.parent / "json" / "config.json"
     try:
         with open(config_path, "r", encoding="utf-8") as file:
             return json.load(file)
