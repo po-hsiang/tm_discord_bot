@@ -5,12 +5,9 @@ import json
 def read_config_file():
     config_path = Path(__file__).parent.parent / "json" / "config.json"  # 設定檔 config.json 的路徑
     try:
-        with open(config_path, "r") as file:
-            config_data = json.load(file)
-            return config_data
+        with open(config_path, "r", encoding="utf-8") as file:
+            return json.load(file)
     except FileNotFoundError:
-        print(f"找不到 {config_path} 文件。")
-        return None
+        raise RuntimeError(f"找不到設定檔 {config_path}，請依 README「快速開始」章節建立 config.json")
     except json.JSONDecodeError as e:
-        print(f"解析 {config_path} 文件時發生錯誤：{str(e)}")
-        return None
+        raise RuntimeError(f"解析設定檔 {config_path} 失敗（JSON 格式錯誤）：{e}")
