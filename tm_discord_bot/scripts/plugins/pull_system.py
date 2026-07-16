@@ -9,7 +9,8 @@ class PullSystem:
         self.luck_sticks = [self.black, self.yellow, self.rainbow]
         self.weights = [94.3, 5.1, 0.6]
 
-    def pull_a_sticks(self):
+    def pull_a_sticks(self, *args, **kwargs):
+        # 接受並忽略多餘參數：「!抽 xxx」帶了參數也不會 TypeError 已讀不回
         results = random.choices(self.luck_sticks, weights=self.weights, k=10)
         results = self.__guaranteed_mechanism(results)
         return " ".join(results)

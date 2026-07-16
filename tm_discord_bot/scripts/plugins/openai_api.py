@@ -5,6 +5,8 @@ import time
 CONFIG = read_config_file()
 openai.api_key = CONFIG.get("openai_api_key")
 
+API_FAIL_MESSAGE = "無法成功打 API，已達到最大重試次數，快看看 Log"
+
 
 class OpenaiAPI:
     def __init__(self):
@@ -26,31 +28,52 @@ class OpenaiAPI:
         ]
 
     def ask_question(self, *args, **kwargs):
-        max_retries = 3
-        retry_count = 0
-        while retry_count < max_retries:
+        prompt = kwargs.get("question")
+        if prompt is None or not str(prompt).strip():
+            return "想問什麼呢？請在指令後面接上問題，例如：「!問 今天晚餐吃什麼好？」"
+
+        # 先用「既有歷史＋這次提問」組出要送出的訊息；成功拿到回答才寫入歷史，
+        # 重試或失敗都不會在歷史裡留下重複或未配對的訊息
+        messages = self.history_msg + [{"role": "user", "content": prompt}]
+        completion = self.__create_completion_with_retry(messages)
+        if completion is None:
+            return API_FAIL_MESSAGE
+
+        answer = completion["choices"][0]["message"]["content"]
+        self.history_msg.append({"role": "user", "content": prompt})
+        self.history_msg.append({"role": "assistant", "content": answer})
+        self.__print_detail(prompt, completion)
+        self.__trim_history_if_needed(completion["usage"])
+
+        print("目前有的歷史訊息：")
+        for index, msg in enumerate(self.history_msg):
+            print(f"{index}: {msg}")
+
+        return answer
+
+    def ask_question_without_memory(self, question):
+        # 單次問答：不讀取也不寫入共用對話歷史（例如每日早安），
+        # 避免排程訊息稀釋與粉絲互動的人設對話記憶
+        messages = [self.system_role, {"role": "user", "content": question}]
+        completion = self.__create_completion_with_retry(messages)
+        if completion is None:
+            return API_FAIL_MESSAGE
+        self.__print_detail(question, completion)
+        return completion["choices"][0]["message"]["content"]
+
+    def __create_completion_with_retry(self, messages):
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
             try:
-                prompt = kwargs.get("question")
-                self.history_msg.append({"role": "user", "content": prompt})
-
-                completion = openai.ChatCompletion.create(model=self.model, messages=self.history_msg)
-
-                self.__print_detail(prompt, completion)
-                answer = completion["choices"][0]["message"]["content"]
-                self.history_msg.append({"role": "assistant", "content": answer})
-
-                print("目前有的歷史訊息：")
-                for index, msg in enumerate(self.history_msg):
-                    print(f"{index}: {msg}")
-
-                return answer
-
+                return openai.ChatCompletion.create(model=self.model, messages=messages)
             except Exception as e:
-                retry_count += 1
-                msg = f"打 API 過去時出現了非預期錯誤，接下來進行第 {retry_count} 次重試"
-                print(f"[{self.__class__.__name__}] {msg}，Exception: {e}")
-                time.sleep(2)
-        return f"無法成功打 API，已達到最大重試次數，快看看 Log"
+                print(
+                    f"[{self.__class__.__name__}] 打 API 過去時出現了非預期錯誤"
+                    f"（第 {attempt}/{max_attempts} 次嘗試），Exception: {e}"
+                )
+                if attempt < max_attempts:
+                    time.sleep(2)
+        return None
 
     def __print_detail(self, prompt, res_json):
         usage = res_json["usage"]
@@ -62,8 +85,10 @@ class OpenaiAPI:
         print(f"Q: {prompt}")
         print(f"A: {answer}\n")
 
-        # 當超過這次打 API 超過 token 限制則 pop 掉後面的兩則訊息
-        if usage["total_tokens"] > self.token_limit:
+    def __trim_history_if_needed(self, usage):
+        # 當這次打 API 超過 token 限制則移除最早的一組問答；
+        # 歷史保證「一問一答」成對寫入，所以固定 pop 兩次不會錯位
+        if usage["total_tokens"] > self.token_limit and len(self.history_msg) >= 3:
             self.history_msg.pop(1)
             self.history_msg.pop(1)
             print(f"本次對話使用的 token 數 {usage['total_tokens']} 超過限制 {self.token_limit}，故移出最早的一次來回對話訊息")
@@ -82,7 +107,7 @@ class OpenaiAPI:
     def search_keyword_image(self, *args, **kwargs):
         try:
             keyword = kwargs.get("question")
-            if len(keyword) == 0:
+            if not keyword or not str(keyword).strip():
                 return f"請輸入搜圖關鍵字"
             prompt = f"請先幫我把待會的關鍵字翻譯成英文(不用回答我)，只需要用這個英文去當新的關鍵字並回覆我一張和關鍵字有相關的圖片，只需要給圖片就好，顯示圖片時請使用 markdown 語法 [關鍵詞](https://source.unsplash.com/1280x720/?英文關鍵詞)，這次的原文關鍵詞是「{keyword}」。"
             completion = openai.ChatCompletion.create(

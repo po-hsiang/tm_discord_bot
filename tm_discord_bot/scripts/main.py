@@ -89,8 +89,9 @@ async def on_message(message):
                 f"從虎喵的歌單內隨機挑了這首歌給 {message.author.mention} \n {song} "
             )
 
-        if user_msg[0:4] == "!查歌單":
-            keyword = user_msg[5:]
+        if user_msg.startswith("!查歌單"):
+            # 用指令長度切關鍵字並去除前後空白，「!查歌單abc」（沒打空格）也不會吃字
+            keyword = user_msg[len("!查歌單"):].strip()
             results = await loop.run_in_executor(
                 worker, partial(yt_song.search_keyword_in_song_list, keyword)
             )

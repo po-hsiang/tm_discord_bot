@@ -31,6 +31,14 @@ class RemindSystem:
             self._tasks = []  # 保留背景任務參考，避免被垃圾回收
             self.config = read_config_file()
 
+    @staticmethod
+    async def _sleep_until_next_minute():
+        # 睡到「下一分鐘整點」再醒來，取代固定 sleep(60)：
+        # 固定間隔會因處理耗時累積漂移，可能整分鐘跳過目標時間（如 07:30）
+        now = datetime.now()
+        seconds_to_next_minute = 60 - now.second - now.microsecond / 1_000_000
+        await asyncio.sleep(seconds_to_next_minute + 0.05)
+
     async def _remind_message(self, time_str, message_content, weekdays=None):
         target_time = datetime.strptime(time_str, "%H:%M")
         while True:
@@ -48,7 +56,7 @@ class RemindSystem:
             except Exception as e:
                 # 任何例外都不能讓背景任務死亡，記錄後下一分鐘繼續
                 print(f"[{self.__class__.__name__}] 提醒任務發生錯誤（一分鐘後繼續運作）：{e}")
-            await asyncio.sleep(60)
+            await self._sleep_until_next_minute()
 
     async def _send_morning_call(self, time_str):
         target_time = datetime.strptime(time_str, "%H:%M")
@@ -72,15 +80,16 @@ class RemindSystem:
             except Exception as e:
                 # 任何例外都不能讓早安任務死亡，記錄後下一分鐘繼續
                 print(f"[{self.__class__.__name__}] 早安任務發生錯誤（一分鐘後繼續運作）：{e}")
-            # 暫停 1 分鐘
-            await asyncio.sleep(60)
+            # 睡到下一分鐘整點
+            await self._sleep_until_next_minute()
 
     def __get_morning_greeting(self, weekday, time_str):
         week_list = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
         question = f"""早安，現在時間是{week_list[weekday]} {time_str}，
 想請妳給各位好虎粉一段充滿活力的招呼語！不用特別提到虎喵，妳只需祝福好虎粉就好✨
 每天的招呼語跟 emoji 記得都要有變化，請生成大約 60 個臺灣繁體中文字元左右。"""
-        answer = self.chat_gpt.ask_question(question=question)
+        # 用無記憶的單次問答，排程訊息不寫入與粉絲互動的共用對話歷史
+        answer = self.chat_gpt.ask_question_without_memory(question)
         song = self.yt_song_chooser.choose_one_song()
         if song.startswith("http"):
             morning_greeting = f"{answer}\n [最後為大家送上本日好歌推推]({song}) "

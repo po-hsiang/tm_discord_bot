@@ -16,9 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=ghcr.io/astral-sh/uv:0.9.29 /uv /uvx /bin/
 
 # uv 設定：直接使用映像內建的 Python 3.8（不另行下載）、預先編譯 bytecode 加速啟動
+# PYTHONUNBUFFERED：print 即時寫出，docker logs 才看得到最新訊息
 ENV UV_PYTHON_DOWNLOADS=never \
     UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy
+    UV_LINK_MODE=copy \
+    PYTHONUNBUFFERED=1
 
 # 設置工作目錄為 /app
 WORKDIR /app
