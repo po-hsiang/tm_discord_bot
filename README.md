@@ -5,8 +5,10 @@
 
 > 版本：`0.1.9`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜部署：Docker Compose
 
-**架構**：AI 相關能力（模型、人設、工具、對話記憶）獨立於 n8n「Discord AI Agent」工作流維護，
-bot 本體只負責 Discord 連線、指令路由與原生功能，兩邊可各自演進。
+**架構**：bot 本體只負責 Discord 連線、指令路由與輕量原生功能，重活外包給兩個微服務——
+AI 能力（模型、人設、工具、對話記憶）在 n8n「Discord AI Agent」工作流；
+歌單能力（載入、快取 TTL 6 小時、多歌單搜尋、隨機選歌）在 `yt-music-mcp`（MCP＋REST 雙介面）。
+三者各自獨立演進。
 
 ---
 
@@ -14,24 +16,27 @@ bot 本體只負責 Discord 連線、指令路由與原生功能，兩邊可各�
 
 機器人只回應設定檔中指定的頻道（`assistant_channel_id` / `test_channel_id`），全形「！」會自動轉為半形「!」。
 
-### 💬 AI 自由對話頻道（免指令）
+頻道內採**混合模式**：
 
-在 `config.ini` 的 `ai_chat_channel_id`（正式）／`ai_chat_test_channel_id`（測試）指定頻道後，
-該頻道內**任何訊息——文字、圖片、貼圖——都直接交給 AI**，不需要打 `!問`；
-機器人以「回覆」形式回應、輸入期間顯示 typing 指示，並忽略其他機器人的發言（防互聊迴圈）。
-對話記憶以頻道為單位（最近 10 輪）。留空則此功能停用。
+1. `!` 開頭 → 優先觸發特定指令（見下表）。
+2. 淘汰賽進行中的 `左`/`A`/`右`/`B` → 遊戲輸入。
+3. **其餘任何訊息——文字、圖片、貼圖——一律視為自然語言，直接與 AI 對話**（不需任何指令）；
+   機器人以「回覆」形式回應、輸入期間顯示 typing，並忽略其他機器人（防互聊迴圈）。
+   對話記憶以頻道為單位（最近 10 輪）。
 
 ### ⌨️ 指令列表
 
 | 指令 | 說明 | 資料來源 |
 | --- | --- | --- |
-| `!問 <問題>`、`!gpt <問題>` | 轉交 n8n AI Agent 以「虎喵小粉絲」人設回答；支援同訊息附圖或貼圖（Gemini 視覺分析）、可查即時資訊（搜尋等工具）、同頻道共享最近 10 輪對話記憶 | n8n AI Agent 微服務 |
+| （自然語言，免指令） | 以「虎喵小粉絲」人設對話；支援附圖或貼圖（Gemini 視覺分析）、可查即時資訊（搜尋等工具） | n8n AI Agent 微服務 |
 | `!抽` | 抽 10 支籤（黑 / 黃 / 彩虹，權重 94.3 / 5.1 / 0.6，含保底機制：10 抽必有黃籤以上） | 內建 |
 | `!吃`、`!吃啥`、`!<分類名>` | 從 Google 試算表隨機抽一個「今天吃什麼」，可指定分類 | Google Sheets |
-| `!聽`、`!歌`、`!聽歌`、`!listen`、`!song` | 從虎喵的 YouTube 歌單隨機推薦一首歌 | YouTube Data API |
-| `!查歌單 <關鍵字>` | 搜尋歌單中標題或頻道名稱含關鍵字的歌曲（自動分段避開 Discord 2000 字上限） | YouTube Data API |
+| `!聽`、`!歌`、`!聽歌`、`!listen`、`!song` | 從虎喵的 YouTube 歌單隨機推薦一首歌 | yt-music-mcp 微服務 |
+| `!查歌單 <關鍵字>` | 跨**全部歌單**搜尋標題或頻道名稱含關鍵字的歌曲（標示所屬歌單、自動分段避開 Discord 2000 字上限） | yt-music-mcp 微服務 |
 | `!21` | 開始 16 強二選一淘汰賽，之後輸入 `左`/`A` 或 `右`/`B` 逐輪選出冠軍 | Google Sheets 候選清單 |
 | `!心結` | 彩蛋固定回覆 | 內建 |
+
+> 舊的 `!問`／`!gpt` 已退役——直接說話即可；打了也會收到轉換提示。
 
 ### ⏰ 排程功能
 
@@ -60,8 +65,8 @@ tm_discord_bot/
         ├── google_sheet_utils.py  # pygsheets 授權初始化
         └── plugins/
             ├── auto_reply_system.py     # 指令路由（字串回覆 / 函式回覆 / 遊戲）
-            ├── ai_agent_client.py       # n8n AI Agent 微服務客戶端（AI 頻道 / !問 / 早安）
-            ├── youtube_api.py           # 歌單載入、隨機點歌、關鍵字搜尋
+            ├── ai_agent_client.py       # n8n AI Agent 微服務客戶端（自然語言對話 / 早安）
+            ├── song_picker.py           # yt-music-mcp 歌單微服務客戶端（點歌 / 查歌單）
             ├── eat_what_system.py       # Google Sheets 讀取吃什麼清單
             ├── pull_system.py           # 加權抽籤 + 保底
             ├── two_choices_one_system.py # 二選一淘汰賽狀態機
@@ -79,9 +84,9 @@ tm_discord_bot/
 | 環境變數 | 說明 |
 | --- | --- |
 | `DISCORD_BOT_TOKEN` | Discord Developer Portal 取得，需開啟 **Message Content Intent** |
-| `YOUTUBE_API_KEY` | YouTube Data API v3 金鑰（點歌 / 查歌單） |
 | `GOOGLE_CREDENTIAL_FILE` | 放在 `tm_discord_bot/json/` 內的 GCP 服務帳戶憑證**檔名**，該帳戶需有試算表讀取權限 |
 | `WHAT_TO_EAT_URL` | 「吃什麼」試算表網址，工作表名稱須為 `工作表1`，每一欄第一列為分類名、其下為選項 |
+| `YT_MUSIC_API_URL` | yt-music-mcp 歌單微服務（bot 與其同在 `ai-net` docker 網路，以服務名直連；本機直跑改 `http://127.0.0.1:8765`） |
 | `N8N_AGENT_WEBHOOK_URL` | n8n「Discord AI Agent」webhook（容器經 `host.docker.internal` 直連宿主機） |
 | `N8N_WEBHOOK_SECRET` | webhook Header Auth 共享密鑰（header 名稱 `X-Webhook-Secret`） |
 | `N8N_API_KEY` | n8n 管理 API 金鑰（開發輔助用，bot 執行期不需要） |
@@ -96,14 +101,9 @@ tm_discord_bot/
 
 ```ini
 [discord]
-assistant_channel_id = 指令頻道 ID
-test_channel_id = 測試指令頻道 ID
+assistant_channel_id = 助手頻道 ID（指令＋自然語言 AI 對話）
+test_channel_id = 測試頻道 ID（同上）
 chitchat_channel_id = 早安訊息頻道 ID
-ai_chat_channel_id = 正式 AI 自由對話頻道 ID（留空＝停用）
-ai_chat_test_channel_id = 測試 AI 自由對話頻道 ID（留空＝停用）
-
-[youtube]
-my_yt_music_playlist_id = YouTube 歌單 ID
 ```
 
 > 修改 `config.ini` 後需重新部署（`docker compose up -d --build`）才會生效。
@@ -137,7 +137,7 @@ docker compose up -d --build
 | Discord | `discord` (discord.py) 2.3+，事件驅動（`on_ready` / `on_message`） |
 | AI 對話 | n8n「Discord AI Agent」工作流（Webhook 微服務）：Gemini 模型＋人設＋工具（搜尋/Wikipedia/計算機/QuickChart/YTMusic MCP）＋按頻道的對話記憶；bot 端僅為 HTTP 客戶端（`ai_agent_client.py`，Header Auth＋60 秒逾時＋降級訊息） |
 | 試算表 | `pygsheets` + GCP 服務帳戶 |
-| YouTube | `google-api-python-client`（經 pygsheets 相依引入）、`youtube-transcript-api` |
+| 歌單 | `yt-music-mcp` 微服務（MCP＋REST 雙介面）：載入、快取（TTL 6 小時）、跨歌單搜尋、隨機選歌全在伺服器端；bot 端僅為 HTTP 客戶端（`song_picker.py`），不需 YouTube API Key |
 | 排程 | `asyncio` 常駐迴圈（每 60 秒檢查一次是否到達目標時間） |
 
 ---
@@ -149,5 +149,5 @@ docker compose up -d --build
 
 ## 📌 已知限制
 
-- 歌單與「吃什麼」清單於**首次使用時載入並快取**，資料異動後需重啟機器人。
+- 「吃什麼」清單於**首次使用時載入並快取**，資料異動後需重啟機器人（歌單則由微服務端 TTL 6 小時自動更新，不需重啟）。
 - 二選一淘汰賽為全頻道共用狀態，同一時間僅能進行一場。

@@ -10,11 +10,11 @@ PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PACKAGE_ROOT.parent / ".env")
 
 # 機敏值一律來自環境變數（.env）；此處為「回傳鍵 → 環境變數名」的對照
+# （YouTube 相關金鑰已不需要：歌單功能由 yt-music-mcp 微服務負責）
 _ENV_KEYS = {
     "discord_bot_token": "DISCORD_BOT_TOKEN",
     "google_credential_file": "GOOGLE_CREDENTIAL_FILE",
     "what_to_eat_url": "WHAT_TO_EAT_URL",
-    "youtube_developer_key": "YOUTUBE_API_KEY",
 }
 
 # 非機敏設定來自 config/config.ini；頻道 ID 需轉為 int（Discord ID 為數字）
@@ -22,8 +22,6 @@ _CHANNEL_KEYS = (
     "assistant_channel_id",
     "test_channel_id",
     "chitchat_channel_id",
-    "ai_chat_channel_id",
-    "ai_chat_test_channel_id",
 )
 
 
@@ -50,9 +48,5 @@ def read_config_file():
     for key in _CHANNEL_KEYS:
         raw = parser.get("discord", key, fallback="").strip()
         config[key] = int(raw) if raw else None
-
-    config["my_yt_music_playlist_id"] = parser.get(
-        "youtube", "my_yt_music_playlist_id", fallback=""
-    ).strip()
 
     return config

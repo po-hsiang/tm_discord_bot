@@ -115,6 +115,8 @@ tm_discord_bot/
 
 9. **（2026-07-31）Python 3.8 → 3.14**：`.python-version`＝3.14、`requires-python = ">=3.14"`、Dockerfile 改 `python:3.14-slim`；uv 重新解析後 discord.py 2.7.1 原地支援、aiohttp 升 3.14.1、dotenv 升 1.2.2。google-auth 的 3.8 EOL 警告從此消失。本機 `.venv` 為 uv 管理的 CPython 3.14.2（系統的 C:\Python38 已不再使用）。第四節第 6 點（系統 Python 3.8.5）已過時。
 
+10. **（2026-08-01）混合對話模式＋歌單改接 yt-music-mcp 微服務**：助手／測試頻道改為「`!` 開頭走指令 → 淘汰賽進行中的左右鍵走遊戲 → 其餘訊息（含純圖片/貼圖）一律自然語言直達 AI」；`!問`/`!gpt` 退役（打了會回轉換提示），前一輪的獨立 AI 頻道機制（ai_chat_*）也移除。歌單功能（`!聽`/`!查歌單`/早安選歌）改打主人自建的 `yt-music-mcp` 微服務（MCP＋REST，快取 TTL 6h，`/random`、`/search` 跨 13 個歌單）——bot 端為 `plugins/song_picker.py`，`youtube_api.py` 與 youtube-transcript-api 相依已移除，**bot 不再需要 YouTube API Key**（.env 的 `YOUTUBE_API_KEY` 已無人讀取）。連線方式：bot 容器加入外部 docker 網路 `ai-net`，以服務名 `http://yt-music-mcp:8765` 直連（該服務只綁宿主機 127.0.0.1，host.docker.internal 打不到）。config.ini 精簡為 [discord] 三鍵。
+
 ## 八、開場動作建議
 
 1. 先確認新路徑下 git 可用（dubious ownership）與 `.venv` 是否需重建。

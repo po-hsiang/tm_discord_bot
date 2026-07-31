@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 import asyncio
 
-from plugins.youtube_api import YouTubeAPIHandler
+from plugins.song_picker import SongPicker
 from plugins.eat_what_system import EatWhatSystem
 from plugins.remind_system import RemindSystem
 from plugins.ai_agent_client import AIAgentClient
@@ -16,32 +16,19 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-# 單一執行緒 worker：原生指令的外部呼叫（Google Sheets／YouTube）移出事件迴圈，
-# 只開一條執行緒讓共享狀態（淘汰賽進度、歌單載入）維持序列化存取
+# 單一執行緒 worker：原生指令的外部呼叫（Google Sheets／歌單微服務）移出事件迴圈，
+# 只開一條執行緒讓共享狀態（淘汰賽進度、吃什麼清單載入）維持序列化存取
 worker = ThreadPoolExecutor(max_workers=1)
 # AI 專用執行緒池：n8n agent 帶工具可能跑數十秒，用獨立執行緒池
 # 讓 AI 慢回覆不會卡住 !吃、!抽 等即時指令（AI 狀態都在 n8n 端，無共享狀態疑慮）
 ai_worker = ThreadPoolExecutor(max_workers=4)
 
 what_to_eat = EatWhatSystem()
-yt_song = YouTubeAPIHandler()
+yt_song = SongPicker()
 ai_agent = AIAgentClient()
-auto_reply_system = AutoReplySystem(
-    yt_song=yt_song, ai_agent=ai_agent, what_to_eat=what_to_eat
-)
+auto_reply_system = AutoReplySystem(what_to_eat=what_to_eat)
 
 SONG_COMMAND_LIST = ["!聽", "!歌", "!聽歌", "!listen", "!song"]
-
-# 自由 AI 對話頻道：頻道內任何訊息（文字/圖片/貼圖）直接交給 AI，不需指令
-# （config.ini 未填寫時為空集合＝功能停用）
-AI_CHAT_CHANNEL_IDS = {
-    cid
-    for cid in (
-        CONFIG.get("ai_chat_channel_id"),
-        CONFIG.get("ai_chat_test_channel_id"),
-    )
-    if cid
-}
 
 
 def _pick_meal(meal_command):
@@ -51,9 +38,9 @@ def _pick_meal(meal_command):
 
 
 def _preload_data():
-    # 預載「吃什麼」清單與歌單；失敗時各自降級，之後使用時會再重試
+    # 預載「吃什麼」清單；失敗時降級，之後使用時會再重試
+    # （歌單的載入與快取已由 yt-music-mcp 微服務負責，不需預載）
     what_to_eat.ensure_loaded()
-    yt_song.ensure_loaded()
 
 
 def _build_ai_context(message):
@@ -85,6 +72,64 @@ async def send_in_chunks(channel, content, chunk_size=1900, reply_to=None):
             await channel.send(chunk)
 
 
+async def _handle_command(message, user_msg, loop):
+    # 指令路徑：以 ! 開頭的訊息走原生功能
+    answer = await loop.run_in_executor(
+        worker, partial(auto_reply_system.get_reply, user_msg)
+    )
+    if answer:
+        await send_in_chunks(message.channel, f"{message.author.mention}\n{answer}")
+
+    check_meal = user_msg.replace("!", "")
+    meal = await loop.run_in_executor(worker, partial(_pick_meal, check_meal))
+    if meal:
+        await message.channel.send(f"{message.author.mention} 「{meal}」")
+
+    if user_msg in SONG_COMMAND_LIST:
+        song = await loop.run_in_executor(worker, yt_song.choose_one_song)
+        await message.channel.send(
+            f"從虎喵的歌單內隨機挑了這首歌給 {message.author.mention} \n {song} "
+        )
+
+    if user_msg.startswith("!查歌單"):
+        # 用指令長度切關鍵字並去除前後空白，「!查歌單abc」（沒打空格）也不會吃字
+        keyword = user_msg[len("!查歌單"):].strip()
+        results = await loop.run_in_executor(
+            worker, partial(yt_song.search_keyword_in_song_list, keyword)
+        )
+        if results:
+            for index, result in enumerate(results):
+                if index == 0:
+                    await message.channel.send(f"{message.author.mention}\n{result}")
+                else:
+                    await message.channel.send(result)
+        else:
+            await message.channel.send(
+                f"{message.author.mention}\n歌單內的歌標題都沒有「{keyword}」字元"
+            )
+
+
+async def _handle_natural_message(message, user_msg, loop):
+    # 非指令訊息：先看是不是進行中的淘汰賽輸入（左/A/右/B），否則視為自然語言直接交給 AI
+    game_reply = await loop.run_in_executor(
+        worker, partial(auto_reply_system.two_choice_game.play_or_start_game, user_msg)
+    )
+    if game_reply:
+        await send_in_chunks(message.channel, f"{message.author.mention}\n{game_reply}")
+        return
+
+    if not user_msg and not message.attachments and not message.stickers:
+        return
+
+    context = _build_ai_context(message)
+    async with message.channel.typing():
+        answer = await loop.run_in_executor(
+            ai_worker, partial(ai_agent.ask, question=user_msg, **context)
+        )
+    if answer:
+        await send_in_chunks(message.channel, answer, reply_to=message)
+
+
 @client.event
 async def on_ready():
     print(f"機器人「{client.user}」已上線。")
@@ -100,75 +145,25 @@ async def on_message(message):
         return
 
     channel_id = message.channel.id
-
-    if channel_id in AI_CHAT_CHANNEL_IDS:
-        # 自由 AI 對話頻道：不需指令，說什麼（含純圖片/貼圖訊息）都直接交給 AI
-        if not message.content and not message.attachments and not message.stickers:
-            return
-        loop = asyncio.get_running_loop()
-        context = _build_ai_context(message)
-        async with message.channel.typing():
-            answer = await loop.run_in_executor(
-                ai_worker, partial(ai_agent.ask, question=message.content, **context)
-            )
-        if answer:
-            await send_in_chunks(message.channel, answer, reply_to=message)
-        return
-
-    if len(message.content) <= 0:
-        return
-
-    if (channel_id == CONFIG.get("assistant_channel_id")) or (
-        channel_id == CONFIG.get("test_channel_id")
+    if (channel_id != CONFIG.get("assistant_channel_id")) and (
+        channel_id != CONFIG.get("test_channel_id")
     ):
-        user_msg = message.content
-        loop = asyncio.get_running_loop()
+        return
 
-        # 轉換全形驚嘆號
-        if "！" in user_msg:
-            user_msg = user_msg.replace("！", "!")
+    user_msg = message.content
 
-        cmd = user_msg.split(" ", 1)[0]
-        is_ai_command = cmd in auto_reply_system.ai_command_list
-        context = _build_ai_context(message) if is_ai_command else {}
-        executor = ai_worker if is_ai_command else worker
+    # 轉換全形驚嘆號
+    if "！" in user_msg:
+        user_msg = user_msg.replace("！", "!")
 
-        answer = await loop.run_in_executor(
-            executor, partial(auto_reply_system.get_reply, user_msg, **context)
-        )
-        if answer:
-            await send_in_chunks(message.channel, f"{message.author.mention}\n{answer}")
+    loop = asyncio.get_running_loop()
 
-        if user_msg[0] == "!":
-            check_meal = user_msg.replace("!", "")
-            meal = await loop.run_in_executor(worker, partial(_pick_meal, check_meal))
-            if meal:
-                await message.channel.send(f"{message.author.mention} 「{meal}」")
-
-        if user_msg in SONG_COMMAND_LIST:
-            song = await loop.run_in_executor(worker, yt_song.choose_one_song)
-            await message.channel.send(
-                f"從虎喵的歌單內隨機挑了這首歌給 {message.author.mention} \n {song} "
-            )
-
-        if user_msg.startswith("!查歌單"):
-            # 用指令長度切關鍵字並去除前後空白，「!查歌單abc」（沒打空格）也不會吃字
-            keyword = user_msg[len("!查歌單"):].strip()
-            results = await loop.run_in_executor(
-                worker, partial(yt_song.search_keyword_in_song_list, keyword)
-            )
-            if results:
-                for index, result in enumerate(results):
-                    if index == 0:
-                        await message.channel.send(
-                            f"{message.author.mention}\n{result}"
-                        )
-                    else:
-                        await message.channel.send(result)
-            else:
-                await message.channel.send(
-                    f"{message.author.mention}\n歌單內的歌標題都沒有「{keyword}」字元"
-                )
+    if user_msg.startswith("!"):
+        # 1) 特定指令優先
+        await _handle_command(message, user_msg, loop)
+    else:
+        # 2) 沒有指令 → 淘汰賽輸入或自然語言 AI 對話（含純圖片/貼圖訊息）
+        await _handle_natural_message(message, user_msg, loop)
 
 
 if __name__ == "__main__":
