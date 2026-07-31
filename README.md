@@ -14,6 +14,15 @@ bot 本體只負責 Discord 連線、指令路由與原生功能，兩邊可各�
 
 機器人只回應設定檔中指定的頻道（`assistant_channel_id` / `test_channel_id`），全形「！」會自動轉為半形「!」。
 
+### 💬 AI 自由對話頻道（免指令）
+
+在 `config.ini` 的 `ai_chat_channel_id`（正式）／`ai_chat_test_channel_id`（測試）指定頻道後，
+該頻道內**任何訊息——文字、圖片、貼圖——都直接交給 AI**，不需要打 `!問`；
+機器人以「回覆」形式回應、輸入期間顯示 typing 指示，並忽略其他機器人的發言（防互聊迴圈）。
+對話記憶以頻道為單位（最近 10 輪）。留空則此功能停用。
+
+### ⌨️ 指令列表
+
 | 指令 | 說明 | 資料來源 |
 | --- | --- | --- |
 | `!問 <問題>`、`!gpt <問題>` | 轉交 n8n AI Agent 以「虎喵小粉絲」人設回答；支援同訊息附圖或貼圖（Gemini 視覺分析）、可查即時資訊（搜尋等工具）、同頻道共享最近 10 輪對話記憶 | n8n AI Agent 微服務 |
@@ -42,75 +51,62 @@ tm_discord_bot/
 ├── .python-version             # 釘住 Python 3.8（uv 自動選用）
 └── tm_discord_bot/
     ├── config/
-    │   └── config.ini          # YouTube API URL、下載資料夾等設定（video analysis 用）
-    ├── json/                   # ⚠️ 不入版控（.gitignore: *.json）
-    │   ├── config.json         # 各服務金鑰與頻道 ID（見下方設定說明）
+    │   └── config.ini          # 非機敏設定：各頻道 ID、歌單 ID（入版控）
+    ├── json/                   # ⚠️ 不入版控（.gitignore: *.json）、不進映像（volume 掛載）
     │   └── <service_account>.json  # Google 服務帳戶憑證（pygsheets 用）
-    ├── scripts/
-    │   ├── main.py             # 進入點：Discord client、事件分派
-    │   ├── config_utils.py     # 讀取 config.json
-    │   ├── google_sheet_utils.py  # pygsheets 授權初始化
-    │   └── plugins/
-    │       ├── auto_reply_system.py     # 指令路由（字串回覆 / 函式回覆 / 遊戲）
-    │       ├── ai_agent_client.py       # n8n AI Agent 微服務客戶端（!問 / 早安）
-    │       ├── youtube_api.py           # 歌單載入、隨機點歌、關鍵字搜尋
-    │       ├── eat_what_system.py       # Google Sheets 讀取吃什麼清單
-    │       ├── pull_system.py           # 加權抽籤 + 保底
-    │       ├── two_choices_one_system.py # 二選一淘汰賽狀態機
-    │       ├── remind_system.py         # 早安 / 定時提醒（Singleton）
-    │       ├── youtube_handler.py       # (開發中) 影片資訊 / CC 字幕擷取
-    │       ├── analyzer.py              # (開發中，尚不可執行) 字幕摘要分析
-    │       └── video analysis.py        # (開發中) 影片分析進入點
-    └── utils/
-        └── config_utils.py     # 讀取 config.json / config.ini（video analysis 用）
+    └── scripts/
+        ├── main.py             # 進入點：Discord client、事件分派、AI 頻道路由
+        ├── config_utils.py     # 統一設定讀取：.env（機敏）＋ config.ini（非機敏）
+        ├── google_sheet_utils.py  # pygsheets 授權初始化
+        └── plugins/
+            ├── auto_reply_system.py     # 指令路由（字串回覆 / 函式回覆 / 遊戲）
+            ├── ai_agent_client.py       # n8n AI Agent 微服務客戶端（AI 頻道 / !問 / 早安）
+            ├── youtube_api.py           # 歌單載入、隨機點歌、關鍵字搜尋
+            ├── eat_what_system.py       # Google Sheets 讀取吃什麼清單
+            ├── pull_system.py           # 加權抽籤 + 保底
+            ├── two_choices_one_system.py # 二選一淘汰賽狀態機
+            └── remind_system.py         # 早安 / 定時提醒（Singleton）
 ```
 
 ---
 
 ## 🚀 快速開始
 
-### 1. 準備設定檔
-
-在 `tm_discord_bot/json/` 建立 `config.json`：
-
-```json
-{
-  "discord_bot_token": "你的 Discord Bot Token",
-  "google_credential_file": "你的服務帳戶憑證檔名.json",
-  "what_to_eat_url": "Google 試算表完整網址",
-  "youtube_developer_key": "你的 YouTube Data API Key",
-  "my_yt_music_playlist_id": "YouTube 歌單 ID",
-  "assistant_channel_id": 123456789012345678,
-  "chitchat_channel_id": 123456789012345678,
-  "test_channel_id": 123456789012345678
-}
-```
-
-| 欄位 | 說明 |
-| --- | --- |
-| `discord_bot_token` | Discord Developer Portal 取得，需開啟 **Message Content Intent** |
-| `google_credential_file` | 放在 `tm_discord_bot/json/` 內的 GCP 服務帳戶憑證檔名，該帳戶需有試算表讀取權限 |
-| `what_to_eat_url` | 「吃什麼」試算表網址，工作表名稱須為 `工作表1`，每一欄第一列為分類名、其下為選項 |
-| `youtube_developer_key` / `my_yt_music_playlist_id` | YouTube Data API v3 金鑰與播放清單 ID |
-| `assistant_channel_id` / `test_channel_id` | 機器人監聽指令的頻道 ID（數字） |
-| `chitchat_channel_id` | 每日早安訊息發送頻道 ID（數字） |
-
-> 舊版的 `openai_api_key` / `openai_model` 欄位已不再使用（AI 已改走 n8n 微服務），留在檔案裡無妨、也可刪除。
-
-### 2. 建立 .env（機敏環境變數）
+### 1. 建立 .env（機敏資訊集中於此）
 
 複製 `.env.example` 為 `.env` 並填入實際值：
 
-```env
-YOUTUBE_API_KEY=your_youtube_data_api_key        # （影片分析開發模組使用）
-N8N_API_KEY=your_n8n_api_key                     # n8n 管理 API（開發輔助用，bot 執行不需要）
-N8N_AGENT_WEBHOOK_URL=http://host.docker.internal:5678/webhook/discord-ai-agent
-N8N_WEBHOOK_SECRET=your_webhook_shared_secret    # 與 n8n Webhook 節點 Header Auth 相同（X-Webhook-Secret）
-```
+| 環境變數 | 說明 |
+| --- | --- |
+| `DISCORD_BOT_TOKEN` | Discord Developer Portal 取得，需開啟 **Message Content Intent** |
+| `YOUTUBE_API_KEY` | YouTube Data API v3 金鑰（點歌 / 查歌單） |
+| `GOOGLE_CREDENTIAL_FILE` | 放在 `tm_discord_bot/json/` 內的 GCP 服務帳戶憑證**檔名**，該帳戶需有試算表讀取權限 |
+| `WHAT_TO_EAT_URL` | 「吃什麼」試算表網址，工作表名稱須為 `工作表1`，每一欄第一列為分類名、其下為選項 |
+| `N8N_AGENT_WEBHOOK_URL` | n8n「Discord AI Agent」webhook（容器經 `host.docker.internal` 直連宿主機） |
+| `N8N_WEBHOOK_SECRET` | webhook Header Auth 共享密鑰（header 名稱 `X-Webhook-Secret`） |
+| `N8N_API_KEY` | n8n 管理 API 金鑰（開發輔助用，bot 執行期不需要） |
 
-> `.env` 已加入 `.gitignore` 與 `.dockerignore`，不會進入版控或 Docker 映像；
+> `.env` 已加入 `.gitignore` 與 `.dockerignore`，不進版控也不進映像；
 > Docker 部署由 `compose.yaml` 的 `env_file` 於**啟動時**注入容器。
 > AI 功能需要宿主機的 n8n 服務在線且「Discord AI Agent」工作流為啟用狀態。
+
+### 2. 設定 config.ini（非機敏設定，入版控）
+
+編輯 `tm_discord_bot/config/config.ini`：
+
+```ini
+[discord]
+assistant_channel_id = 指令頻道 ID
+test_channel_id = 測試指令頻道 ID
+chitchat_channel_id = 早安訊息頻道 ID
+ai_chat_channel_id = 正式 AI 自由對話頻道 ID（留空＝停用）
+ai_chat_test_channel_id = 測試 AI 自由對話頻道 ID（留空＝停用）
+
+[youtube]
+my_yt_music_playlist_id = YouTube 歌單 ID
+```
+
+> 修改 `config.ini` 後需重新部署（`docker compose up -d --build`）才會生效。
 
 ### 3-A. 本機執行（uv）
 
@@ -148,11 +144,10 @@ docker compose up -d --build
 
 ## ⚠️ 安全注意事項
 
-- `tm_discord_bot/json/*.json`（Bot Token、API 金鑰、GCP 憑證）已被 `.gitignore` 排除，**請勿**將其加入版控。
-- Docker 映像建置時會將 `json/` 一併打包進映像（執行時需要），請勿將此映像推送到公開 registry。
+- 機敏資訊集中於 `.env`（gitignore／dockerignore 皆排除）；GCP 憑證放 `tm_discord_bot/json/`（gitignore 排除、Docker 以唯讀 volume 掛載）。
+- **Docker 映像本身不含任何機敏檔案**：金鑰由 `env_file` 於啟動時注入、憑證由 volume 提供。
 
 ## 📌 已知限制
 
-- 歌單與「吃什麼」清單皆於**啟動時載入一次**，資料異動後需重啟機器人。
+- 歌單與「吃什麼」清單於**首次使用時載入並快取**，資料異動後需重啟機器人。
 - 二選一淘汰賽為全頻道共用狀態，同一時間僅能進行一場。
-- `youtube_handler.py` / `analyzer.py` / `video analysis.py` 為開發中的影片分析功能，尚未串接到機器人主流程。

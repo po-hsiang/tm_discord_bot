@@ -32,6 +32,17 @@ auto_reply_system = AutoReplySystem(
 
 SONG_COMMAND_LIST = ["!聽", "!歌", "!聽歌", "!listen", "!song"]
 
+# 自由 AI 對話頻道：頻道內任何訊息（文字/圖片/貼圖）直接交給 AI，不需指令
+# （config.ini 未填寫時為空集合＝功能停用）
+AI_CHAT_CHANNEL_IDS = {
+    cid
+    for cid in (
+        CONFIG.get("ai_chat_channel_id"),
+        CONFIG.get("ai_chat_test_channel_id"),
+    )
+    if cid
+}
+
 
 def _pick_meal(meal_command):
     if meal_command in what_to_eat.get_meal_commend_list():
@@ -63,10 +74,15 @@ def _build_ai_context(message):
     }
 
 
-async def send_in_chunks(channel, content, chunk_size=1900):
-    # Discord 單則訊息上限 2000 字，超過就分段送出
+async def send_in_chunks(channel, content, chunk_size=1900, reply_to=None):
+    # Discord 單則訊息上限 2000 字，超過就分段送出；
+    # reply_to 指定時，第一段以「回覆」形式呈現（多人頻道中對話脈絡更清楚）
     for i in range(0, len(content), chunk_size):
-        await channel.send(content[i : i + chunk_size])
+        chunk = content[i : i + chunk_size]
+        if reply_to is not None and i == 0:
+            await reply_to.reply(chunk)
+        else:
+            await channel.send(chunk)
 
 
 @client.event
@@ -79,14 +95,29 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    if message.author == client.user:
-        # 忽略機器人自己的發言 ☆㊣⤦虎喵小粉絲➷㊣❥#4703
+    if message.author == client.user or message.author.bot:
+        # 忽略機器人（含自己 ☆㊣⤦虎喵小粉絲➷㊣❥#4703）的發言，避免機器人互聊迴圈
+        return
+
+    channel_id = message.channel.id
+
+    if channel_id in AI_CHAT_CHANNEL_IDS:
+        # 自由 AI 對話頻道：不需指令，說什麼（含純圖片/貼圖訊息）都直接交給 AI
+        if not message.content and not message.attachments and not message.stickers:
+            return
+        loop = asyncio.get_running_loop()
+        context = _build_ai_context(message)
+        async with message.channel.typing():
+            answer = await loop.run_in_executor(
+                ai_worker, partial(ai_agent.ask, question=message.content, **context)
+            )
+        if answer:
+            await send_in_chunks(message.channel, answer, reply_to=message)
         return
 
     if len(message.content) <= 0:
         return
 
-    channel_id = message.channel.id
     if (channel_id == CONFIG.get("assistant_channel_id")) or (
         channel_id == CONFIG.get("test_channel_id")
     ):

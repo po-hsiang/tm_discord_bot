@@ -111,6 +111,8 @@ tm_discord_bot/
 
 7. **（2026-07-31）AI 功能已抽離為 n8n 微服務**：`!問`/`!gpt`（含圖片/貼圖）與每日早安改走 n8n「Discord AI Agent」工作流（Gemini 3.5 Flash＋人設＋工具＋按頻道 Simple Memory，早安用獨立 `morning-call` session）。bot 端新增 `plugins/ai_agent_client.py`（Header Auth、60 秒逾時、失敗降級），AI 指令走獨立 4 執行緒池不卡原生指令。`openai_api.py` 與 openai 套件已退役、`!搜圖` 指令已移除。webhook 已加 Header Auth（密鑰在 `.env` 的 `N8N_WEBHOOK_SECRET`；ngrok 公開網址不再裸奔）。bot 容器經 `host.docker.internal` 直連宿主機 n8n，機敏環境變數由 compose `env_file` 注入。**雷點**：n8n 公開 API 的 `PUT /workflows` 會拒絕含未知鍵的 `settings`（400），更新工作流時要過濾到允許的鍵。
 
+8. **（2026-07-31）設定整併＋AI 自由對話頻道**：`config.json` 退役（本機留有 `json/config.backup.json` 備份，gitignore 排除）——機敏值全數遷入 `.env`（`DISCORD_BOT_TOKEN`／`YOUTUBE_API_KEY`／`GOOGLE_CREDENTIAL_FILE`／`WHAT_TO_EAT_URL`＋n8n 三鍵），非機敏設定（各頻道 ID、歌單 ID）入版控的 `config/config.ini`；`scripts/config_utils.py` 為唯一讀取器（回傳鍵與舊 config.json 相容）。三個開發中模組（youtube_handler／analyzer／video analysis.py）與 `utils/config_utils.py` 已移除（git 歷史可找回）。Docker 映像不再含機敏檔（env_file 注入＋json/ 唯讀 volume）。新功能：`config.ini` 的 `ai_chat_channel_id`／`ai_chat_test_channel_id` 指定的頻道為**免指令 AI 自由對話頻道**（文字/圖片/貼圖直達 agent、回覆形式回應、忽略其他 bot；留空停用）——**主人填入頻道 ID 後需 `docker compose up -d --build` 重新部署**。第七節的檔案結構已過時，以 README 為準。
+
 ## 八、開場動作建議
 
 1. 先確認新路徑下 git 可用（dubious ownership）與 `.venv` 是否需重建。

@@ -1,14 +1,58 @@
 from pathlib import Path
-import json
+import configparser
+import os
+
+from dotenv import load_dotenv
+
+# tm_discord_bot/ 套件目錄；.env 在專案根（本機直跑時載入，
+# Docker 部署由 compose.yaml 的 env_file 注入，容器內沒有 .env 也無妨）
+PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(PACKAGE_ROOT.parent / ".env")
+
+# 機敏值一律來自環境變數（.env）；此處為「回傳鍵 → 環境變數名」的對照
+_ENV_KEYS = {
+    "discord_bot_token": "DISCORD_BOT_TOKEN",
+    "google_credential_file": "GOOGLE_CREDENTIAL_FILE",
+    "what_to_eat_url": "WHAT_TO_EAT_URL",
+    "youtube_developer_key": "YOUTUBE_API_KEY",
+}
+
+# 非機敏設定來自 config/config.ini；頻道 ID 需轉為 int（Discord ID 為數字）
+_CHANNEL_KEYS = (
+    "assistant_channel_id",
+    "test_channel_id",
+    "chitchat_channel_id",
+    "ai_chat_channel_id",
+    "ai_chat_test_channel_id",
+)
 
 
 def read_config_file():
-    # 設定檔 config.json 的路徑（resolve() 轉絕對路徑，避免相對匯入時解析到錯誤位置）
-    config_path = Path(__file__).resolve().parent.parent / "json" / "config.json"
-    try:
-        with open(config_path, "r", encoding="utf-8") as file:
-            return json.load(file)
-    except FileNotFoundError:
-        raise RuntimeError(f"找不到設定檔 {config_path}，請依 README「快速開始」章節建立 config.json")
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"解析設定檔 {config_path} 失敗（JSON 格式錯誤）：{e}")
+    """整併後的設定讀取：.env（機敏）＋ config/config.ini（非機敏）。
+
+    回傳 dict 的鍵與舊版 config.json 相容，既有模組不需改動；
+    未填寫的選填設定（如 AI 頻道）回傳 None。
+    """
+    ini_path = PACKAGE_ROOT / "config" / "config.ini"
+    parser = configparser.ConfigParser()
+    if not parser.read(ini_path, encoding="utf-8"):
+        raise RuntimeError(f"找不到設定檔 {ini_path}，請確認專案結構完整")
+
+    config = {key: os.getenv(env_name) for key, env_name in _ENV_KEYS.items()}
+
+    missing = [_ENV_KEYS[k] for k, v in config.items() if not v]
+    if missing:
+        raise RuntimeError(
+            f"缺少機敏環境變數：{missing}，"
+            "請依 .env.example 設定 .env（Docker 部署經 compose.yaml 的 env_file 注入）"
+        )
+
+    for key in _CHANNEL_KEYS:
+        raw = parser.get("discord", key, fallback="").strip()
+        config[key] = int(raw) if raw else None
+
+    config["my_yt_music_playlist_id"] = parser.get(
+        "youtube", "my_yt_music_playlist_id", fallback=""
+    ).strip()
+
+    return config

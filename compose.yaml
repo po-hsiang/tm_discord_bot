@@ -14,4 +14,7 @@ services:
     # 此設定為移機到 Linux Docker 時的相容保險）
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # GCP 服務帳戶憑證以唯讀掛載；映像本身不再包含任何機敏檔案
+    volumes:
+      - ./tm_discord_bot/json:/app/tm_discord_bot/json:ro
     restart: always
