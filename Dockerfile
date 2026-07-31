@@ -1,5 +1,5 @@
-# 使用官方 Python 3.8 映像作為基礎映像
-FROM python:3.8-slim
+# 使用官方 Python 3.14 映像作為基礎映像
+FROM python:3.14-slim
 
 # 更新軟件包列表
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 安裝 uv（從官方映像複製執行檔，版本與本機開發環境一致）
 COPY --from=ghcr.io/astral-sh/uv:0.9.29 /uv /uvx /bin/
 
-# uv 設定：直接使用映像內建的 Python 3.8（不另行下載）、預先編譯 bytecode 加速啟動
+# uv 設定：直接使用映像內建的 Python 3.14（不另行下載）、預先編譯 bytecode 加速啟動
 # PYTHONUNBUFFERED：print 即時寫出，docker logs 才看得到最新訊息
 ENV UV_PYTHON_DOWNLOADS=never \
     UV_COMPILE_BYTECODE=1 \

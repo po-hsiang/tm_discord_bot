@@ -3,7 +3,7 @@
 一隻為遊戲實況主「老虎喵喵喵（虎喵）」粉絲社群打造的 Discord 互動機器人。
 以「虎喵小粉絲」的人設與好虎粉互動，功能涵蓋 AI 聊天問答（含圖片/貼圖理解）、每日早安招呼、隨機點歌、吃什麼抽選、抽籤、二選一淘汰賽等。
 
-> 版本：`0.1.9`｜語言：Python 3.8+｜套件管理：uv｜AI：n8n AI Agent 微服務｜部署：Docker Compose
+> 版本：`0.1.9`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜部署：Docker Compose
 
 **架構**：AI 相關能力（模型、人設、工具、對話記憶）獨立於 n8n「Discord AI Agent」工作流維護，
 bot 本體只負責 Discord 連線、指令路由與原生功能，兩邊可各自演進。
@@ -44,11 +44,11 @@ bot 本體只負責 Discord 連線、指令路由與原生功能，兩邊可各�
 
 ```
 tm_discord_bot/
-├── Dockerfile                  # Python 3.8-slim + uv 建置
+├── Dockerfile                  # Python 3.14-slim + uv 建置
 ├── compose.yaml                # Docker Compose（TZ=Asia/Taipei、restart: always）
 ├── pyproject.toml              # 相依定義（PEP 621，由 uv 管理）
 ├── uv.lock                     # uv 鎖定檔（入版控，確保可重現安裝）
-├── .python-version             # 釘住 Python 3.8（uv 自動選用）
+├── .python-version             # 釘住 Python 3.14（uv 自動下載選用）
 └── tm_discord_bot/
     ├── config/
     │   └── config.ini          # 非機敏設定：各頻道 ID、歌單 ID（入版控）
@@ -111,7 +111,7 @@ my_yt_music_playlist_id = YouTube 歌單 ID
 ### 3-A. 本機執行（uv）
 
 ```bash
-uv sync                # 依 uv.lock 建立 .venv 並安裝相依（會自動使用 Python 3.8）
+uv sync                # 依 uv.lock 建立 .venv 並安裝相依（會自動下載並使用 Python 3.14）
 cd tm_discord_bot/scripts
 uv run python main.py
 ```
