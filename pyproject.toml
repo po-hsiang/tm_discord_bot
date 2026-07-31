@@ -3,7 +3,7 @@ name = "tm-discord-bot"
 version = "0.1.9"
 description = ""
 readme = "README.md"
-authors = [{ name = "pohsiangjuan", email = "pohsiangjuan@igs.com.tw" }]
+authors = [{ name = "po-hsiang", email = "wsxxcv11733@gmail.com" }]
 requires-python = ">=3.8"
 dependencies = [
     "discord>=2.3.2,<3",

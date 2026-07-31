@@ -67,7 +67,7 @@
 
 ## 六、Git 身分現況（主人尚未決定，只可建議不可動手）
 
-- 全域：`pohsiangjuan` / `pohsiangjuan@igs.com.tw`（**公司信箱**）；此 repo 無 local 覆寫。
+- 全域：`pohsiangjuan` /（**公司信箱**，略）；此 repo 無 local 覆寫。
 - 矛盾點：commit 掛公司 email，卻推到個人帳號 po-hsiang 的 GitHub → 貢獻牆可能不計入。
 - 認證：HTTPS ＋ Git Credential Manager（`credential.helper = manager`）；`~/.ssh/config` 沒有 GitHub 別名（現有的是公司伺服器跳板設定，勿動）。
 - 已提供的方案：① repo 內 `git config user.name/email` 手動切；② `~/.gitconfig` 用 `includeIf "gitdir/i:D:/GitPrivate/"` 自動切個人身分（搬家後路徑正好適合）；③ 推送認證用 remote URL 帶帳號（`https://po-hsiang@github.com/...`）或 SSH 別名。
