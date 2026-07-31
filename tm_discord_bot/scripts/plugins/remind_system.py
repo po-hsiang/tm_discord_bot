@@ -54,7 +54,9 @@ class RemindSystem:
 
     def __get_morning_greeting(self, weekday, time_str):
         week_list = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
-        question = f"早安，現在時間是{week_list[weekday]}{time_str}，你可以給各位好虎粉一個熱情且活力的早安招呼語嗎？不用特別提到虎喵，你只需祝福好虎粉就好，請用40字以內回答"
+        question = f"""早安，現在時間是{week_list[weekday]} {time_str}，
+想請妳給各位好虎粉一段充滿活力的招呼語！不用特別提到虎喵，妳只需祝福好虎粉就好✨
+每天的招呼語跟 emoji 記得都要有變化，請生成大約 60 個臺灣繁體中文字元左右。"""
         answer = self.chat_gpt.ask_question(question=question)
         song = self.yt_song_chooser.choose_one_song()
         morning_greeting = f"{answer}\n [最後為大家送上本日好歌推推]({song}) "

@@ -1,18 +1,18 @@
-[tool.poetry]
+[project]
 name = "tm-discord-bot"
 version = "0.1.9"
 description = ""
-authors = ["pohsiangjuan <pohsiangjuan@igs.com.tw>"]
 readme = "README.md"
-packages = [{include = "tm_discord_bot"}]
+authors = [{ name = "pohsiangjuan", email = "pohsiangjuan@igs.com.tw" }]
+requires-python = ">=3.8"
+dependencies = [
+    "discord>=2.3.2,<3",
+    "pygsheets>=2.0.6,<3",
+    "openai>=0.27.2,<0.28",
+    "youtube-transcript-api>=0.6.2,<0.7",
+    "python-dotenv>=1.0,<2",
+]
 
-[tool.poetry.dependencies]
-python = "^3.8"
-discord = "^2.3.2"
-pygsheets = "^2.0.6"
-openai = "^0.27.2"
-
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.uv]
+# 本專案以 scripts/ 為匯入根目錄直接執行，不作為套件安裝（等同 poetry install --no-root）
+package = false

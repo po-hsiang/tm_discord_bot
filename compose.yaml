@@ -1,8 +1,10 @@
 services:
   tm_discord_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: tm_discord_bot:latest
     container_name: tm_discord_bot
     environment:
       - TZ=Asia/Taipei
-    ports:
-      - "5487:5487"
+    restart: always
