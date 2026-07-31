@@ -16,13 +16,13 @@ class RemindSystem:
                 cls._instance = super(RemindSystem, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, client, chat_gpt, yt_song_chooser, executor=None) -> None:
+    def __init__(self, client, ai_agent, yt_song_chooser, executor=None) -> None:
         if not hasattr(self, "initialized"):
             self.initialized = True
 
             # 初始化工作，以下這區塊只會執行一次
             self.client = client
-            self.chat_gpt = chat_gpt
+            self.ai_agent = ai_agent
             self.yt_song_chooser = yt_song_chooser
             # 與指令處理共用同一個單執行緒 worker，
             # 阻塞的 GPT／歌單呼叫不會凍結事件迴圈，共享狀態也維持序列化存取
@@ -88,8 +88,13 @@ class RemindSystem:
         question = f"""早安，現在時間是{week_list[weekday]} {time_str}，
 想請妳給各位好虎粉一段充滿活力的招呼語！不用特別提到虎喵，妳只需祝福好虎粉就好✨
 每天的招呼語跟 emoji 記得都要有變化，請生成大約 60 個臺灣繁體中文字元左右。"""
-        # 用無記憶的單次問答，排程訊息不寫入與粉絲互動的共用對話歷史
-        answer = self.chat_gpt.ask_question_without_memory(question)
+        # 走 n8n AI Agent，並使用專屬 session（morning-call）：
+        # 與各頻道聊天記憶隔離，又能看見前幾天的招呼語，利於「每天都要有變化」
+        answer = self.ai_agent.ask(
+            question=question,
+            user_id="morning-call",
+            channel_id="morning-call",
+        )
         song = self.yt_song_chooser.choose_one_song()
         if song.startswith("http"):
             morning_greeting = f"{answer}\n [最後為大家送上本日好歌推推]({song}) "

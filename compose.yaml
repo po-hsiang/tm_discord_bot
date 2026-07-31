@@ -7,4 +7,11 @@ services:
     container_name: tm_discord_bot
     environment:
       - TZ=Asia/Taipei
+    # 機敏環境變數（n8n webhook 位址與密鑰等）於啟動時注入，不進映像
+    env_file:
+      - .env
+    # 讓容器能以 host.docker.internal 連到宿主機的 n8n（Docker Desktop 內建，
+    # 此設定為移機到 Linux Docker 時的相容保險）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: always

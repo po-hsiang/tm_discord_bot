@@ -8,7 +8,6 @@ requires-python = ">=3.8"
 dependencies = [
     "discord>=2.3.2,<3",
     "pygsheets>=2.0.6,<3",
-    "openai>=0.27.2,<0.28",
     "youtube-transcript-api>=0.6.2,<0.7",
     "python-dotenv>=1.0,<2",
 ]
