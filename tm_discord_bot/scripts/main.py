@@ -7,6 +7,12 @@ from plugins.eat_what_system import EatWhatSystem
 from plugins.remind_system import RemindSystem
 from plugins.ai_agent_client import AIAgentClient
 from plugins.auto_reply_system import AutoReplySystem
+from plugins.video_summary import (
+    VideoSummaryClient,
+    build_embed,
+    build_error_message,
+    extract_video_id,
+)
 from config_utils import read_config_file
 import discord
 
@@ -27,6 +33,11 @@ what_to_eat = EatWhatSystem()
 yt_song = SongPicker()
 ai_agent = AIAgentClient()
 auto_reply_system = AutoReplySystem(what_to_eat=what_to_eat)
+video_summary = VideoSummaryClient()
+
+# 摘要進行中的影片（video_id → Future）：同影片同時被多人貼上時共用同一個請求，
+# 不重複打 n8n / LLM；完成後自動移除（成功結果的 TTL 快取在 plugin 內）
+_summary_inflight = {}
 
 SONG_COMMAND_LIST = ["!聽", "!歌", "!聽歌", "!listen", "!song"]
 
@@ -109,6 +120,35 @@ async def _handle_command(message, user_msg, loop):
             )
 
 
+async def _handle_video_summary(message, video_id, loop):
+    # 摘要可能跑數十秒，用 ⏳ reaction 代替 typing indicator 讓使用者知道有在處理
+    try:
+        await message.add_reaction("⏳")
+    except discord.HTTPException:
+        pass
+
+    future = _summary_inflight.get(video_id)
+    if future is None:
+        future = loop.run_in_executor(
+            ai_worker, partial(video_summary.summarize, video_id)
+        )
+        _summary_inflight[video_id] = future
+        future.add_done_callback(lambda _: _summary_inflight.pop(video_id, None))
+
+    try:
+        result = await future
+    finally:
+        try:
+            await message.remove_reaction("⏳", client.user)
+        except discord.HTTPException:
+            pass
+
+    if result.get("ok"):
+        await message.reply(embed=build_embed(result))
+    else:
+        await message.reply(build_error_message(result))
+
+
 async def _handle_natural_message(message, user_msg, loop):
     # 非指令訊息：先看是不是進行中的淘汰賽輸入（左/A/右/B），否則視為自然語言直接交給 AI
     game_reply = await loop.run_in_executor(
@@ -145,6 +185,21 @@ async def on_message(message):
         return
 
     channel_id = message.channel.id
+    loop = asyncio.get_running_loop()
+
+    # YouTube 影片快速摘要：專屬頻道（含測試頻道）貼影片連結即觸發，免指令
+    if channel_id in (
+        CONFIG.get("video_summary_channel_id"),
+        CONFIG.get("test_channel_id"),
+    ):
+        video_id = extract_video_id(message.content)
+        if video_id:
+            await _handle_video_summary(message, video_id, loop)
+            return
+        if channel_id == CONFIG.get("video_summary_channel_id"):
+            # 專屬頻道只處理影片連結，其他訊息靜默忽略
+            return
+
     if (channel_id != CONFIG.get("assistant_channel_id")) and (
         channel_id != CONFIG.get("test_channel_id")
     ):
@@ -155,8 +210,6 @@ async def on_message(message):
     # 轉換全形驚嘆號
     if "！" in user_msg:
         user_msg = user_msg.replace("！", "!")
-
-    loop = asyncio.get_running_loop()
 
     if user_msg.startswith("!"):
         # 1) 特定指令優先

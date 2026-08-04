@@ -117,6 +117,8 @@ tm_discord_bot/
 
 10. **（2026-08-01）混合對話模式＋歌單改接 yt-music-mcp 微服務**：助手／測試頻道改為「`!` 開頭走指令 → 淘汰賽進行中的左右鍵走遊戲 → 其餘訊息（含純圖片/貼圖）一律自然語言直達 AI」；`!問`/`!gpt` 退役（打了會回轉換提示），前一輪的獨立 AI 頻道機制（ai_chat_*）也移除。歌單功能（`!聽`/`!查歌單`/早安選歌）改打主人自建的 `yt-music-mcp` 微服務（MCP＋REST，快取 TTL 6h，`/random`、`/search` 跨 13 個歌單）——bot 端為 `plugins/song_picker.py`，`youtube_api.py` 與 youtube-transcript-api 相依已移除，**bot 不再需要 YouTube API Key**（.env 的 `YOUTUBE_API_KEY` 已無人讀取）。連線方式：bot 容器加入外部 docker 網路 `ai-net`，以服務名 `http://yt-music-mcp:8765` 直連（該服務只綁宿主機 127.0.0.1，host.docker.internal 打不到）。config.ini 精簡為 [discord] 三鍵。
 
+11. **（2026-08-04）YouTube 影片快速摘要功能上線**（規格源自舊 LINE bot 的 `NEW_FREATURES_quick_summary.md`，未入版控）：專屬頻道（`config.ini` 的 `video_summary_channel_id`）或測試頻道貼 YouTube 連結（`watch?v=`/`youtu.be`/`/live/` 三格式）即觸發，⏳ reaction → Embed 回覆「重點大綱」2～5 點。三層分工：bot（`plugins/video_summary.py`，⏳/Embed/6h TTL 快取/同影片並發去重 `video_id→Future`）→ n8n「YouTube 影片快速摘要」工作流（id `t2OrIkAIr29Qws3S`，Gemini Flash 結構化輸出；**模型與提詞都在這裡改**，改完存檔即生效）→ yt-music-mcp 新端點 `GET /video/{id}`（1 unit）與 `GET /transcript/{id}`（免配額；人工字幕優先→自動生成）。回應契約：`{ok, video_id, title, channel, thumbnail_url, video_url, duration_seconds, summary:{重點大綱:[...]}}`，錯誤碼 `VIDEO_NOT_FOUND`/`LIVE_STREAM`/`NO_TRANSCRIPT`/`SUMMARY_FAILED`/`UPSTREAM_ERROR` 對應文案在 plugin 的 `ERROR_MESSAGES`。新 env 鍵 `N8N_YT_SUMMARY_WEBHOOK_URL`（沿用 `N8N_WEBHOOK_SECRET`）。`tests/test_video_summary.py` 為本 repo 首批單元測試（`uv run python -m unittest discover -s tests`）。**雷點**：`config.ini` 與程式碼都是 `COPY . /app` 進映像，任何修改都要 `docker compose up -d --build`（單純 restart 無效）。已知限制：無 CC 字幕（含字幕燒在畫面內）的影片無法摘要，Phase 2 候選方案為 n8n 端 fallback 讓 Gemini 直接吃 YouTube URL 看影片（bot 端零改動）。
+
 ## 八、開場動作建議
 
 1. 先確認新路徑下 git 可用（dubious ownership）與 `.venv` 是否需重建。
