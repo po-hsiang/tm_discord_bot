@@ -3,7 +3,7 @@
 一隻為遊戲實況主「老虎喵喵喵（虎喵）」粉絲社群打造的 Discord 互動機器人。
 以「虎喵小粉絲」的人設與好虎粉互動，功能涵蓋 AI 聊天問答（含圖片/貼圖理解）、YouTube 影片快速摘要、每日早安招呼、隨機點歌、吃什麼抽選、抽籤、二選一淘汰賽等。
 
-> 版本：`0.2.0`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜部署：Docker Compose
+> 版本：`0.2.1`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜部署：Docker Compose
 
 **架構**：bot 本體只負責 Discord 連線、指令路由與輕量原生功能，重活外包給微服務——
 AI 能力（模型、人設、工具、對話記憶）在 n8n「Discord AI Agent」工作流；
@@ -47,10 +47,11 @@ AI 能力（模型、人設、工具、對話記憶）在 n8n「Discord AI Agent
 2. 完成後回覆 Embed 卡片：影片標題（可點擊）＋縮圖＋**重點大綱（2～5 點、每點一句話）**＋頁尾「頻道名｜片長」。
 3. 支援 `watch?v=`、`youtu.be/`、`/live/` 三種連結格式（`/shorts/` 不支援）；專屬頻道內非影片連結的訊息一律靜默忽略。
 4. 同一支影片 6 小時內重複貼上直接回快取（不重打 LLM）；多人同時貼同一支影片只會發出一次請求。
-5. 直播中的影片、沒有字幕的影片會以文字婉拒。
+5. 直播中、音樂類（MV/演奏/Topic 頻道）、超過 2 小時的影片會以文字婉拒。
 
-> 流程：bot → n8n「YouTube 影片快速摘要」工作流 → yt-music-mcp（影片資訊＋CC 字幕）→ Gemini Flash 結構化輸出。
-> 字幕來源為 YouTube CC（人工字幕優先、自動生成次之）；字幕燒在畫面內的影片無 CC 可用，無法摘要。
+> 流程：bot → n8n「YouTube 影片快速摘要」工作流 → yt-music-mcp（影片資訊＋CC 字幕）→ LLM 結構化輸出。
+> 字幕來源三層遞補：**CC 字幕**（人工優先、自動生成次之）→ 無 CC 時改抓**低碼率音訊**（yt-music-mcp `/audio`，yt-dlp）交給 Gemini 轉錄＋摘要 → 音訊層技術性失敗時最後由 **Gemini 直接看影片**（YouTube URL）。
+> 回應附 `source` 欄位（transcript/audio/video）標示摘要來源。
 
 ### ⏰ 排程功能
 
@@ -153,7 +154,7 @@ docker compose up -d --build
 | --- | --- |
 | Discord | `discord` (discord.py) 2.3+，事件驅動（`on_ready` / `on_message`） |
 | AI 對話 | n8n「Discord AI Agent」工作流（Webhook 微服務）：Gemini 模型＋人設＋工具（搜尋/Wikipedia/計算機/QuickChart/YTMusic MCP）＋按頻道的對話記憶；bot 端僅為 HTTP 客戶端（`ai_agent_client.py`，Header Auth＋60 秒逾時＋降級訊息） |
-| 影片摘要 | n8n「YouTube 影片快速摘要」工作流：yt-music-mcp `/video`（時長/直播預檢）＋`/transcript`（CC 字幕）→ Gemini Flash 結構化輸出（重點大綱 2～5 點）；bot 端僅為 HTTP 客戶端（`video_summary.py`，180 秒逾時＋TTL 6 小時快取＋同影片並發去重） |
+| 影片摘要 | n8n「YouTube 影片快速摘要」工作流：yt-music-mcp `/video`（時長/直播預檢）＋`/transcript`（CC 字幕）→ LLM 結構化輸出（重點大綱 2～5 點）；無 CC 時二層備援：`/audio` 低碼率音訊→Gemini 轉錄摘要 → Gemini 直接看影片；bot 端僅為 HTTP 客戶端（`video_summary.py`，180 秒逾時＋TTL 6 小時快取＋同影片並發去重），另有短期成本追蹤報告（`plugins/summary_report.py` → `reports/`，gitignore 排除） |
 | 試算表 | `pygsheets` + GCP 服務帳戶 |
 | 歌單 | `yt-music-mcp` 微服務（MCP＋REST 雙介面）：載入、快取（TTL 6 小時）、跨歌單搜尋、隨機選歌全在伺服器端；bot 端僅為 HTTP 客戶端（`song_picker.py`），不需 YouTube API Key |
 | 排程 | `asyncio` 常駐迴圈（每 60 秒檢查一次是否到達目標時間） |
@@ -169,4 +170,4 @@ docker compose up -d --build
 
 - 「吃什麼」清單於**首次使用時載入並快取**，資料異動後需重啟機器人（歌單則由微服務端 TTL 6 小時自動更新，不需重啟）。
 - 二選一淘汰賽為全頻道共用狀態，同一時間僅能進行一場。
-- 影片摘要僅支援有 CC 字幕（人工或自動生成）的影片：字幕燒在畫面內、直播中、`/shorts/` 皆不支援；YouTube 自動字幕通常在影片上傳後數小時～數天才生成，當下失敗的影片過幾天再貼可能就成功。
+- 影片摘要：直播中、`/shorts/`、音樂類（MV/演奏/Topic 頻道）、超過 2 小時的影片不支援；無 CC 字幕的影片改走音訊轉錄備援（費用略高、耗時約 1 分鐘）。

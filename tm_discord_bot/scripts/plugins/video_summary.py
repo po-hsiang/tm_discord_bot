@@ -9,6 +9,8 @@ import urllib.request
 import discord
 from dotenv import load_dotenv
 
+from . import summary_report
+
 # 本機直跑時從專案根載入 .env；Docker 部署由 compose.yaml 的 env_file 注入
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
@@ -17,6 +19,8 @@ ERROR_MESSAGES = {
     "VIDEO_NOT_FOUND": "無法取得相關影片，請確認連結 🙏",
     "LIVE_STREAM": "這部影片在直播中，請選擇其他影片 🙏",
     "NO_TRANSCRIPT": "無法取得影片字幕，請選擇其他影片 🙏",
+    "MUSIC_CONTENT": "音樂類影片不支援摘要，請選擇其他影片 🙏",
+    "VIDEO_TOO_LONG": "影片超過 2 小時，不支援摘要 🙏",
     "SUMMARY_FAILED": "分析結果不符合預期格式，請再試一次 🙏",
     "UPSTREAM_ERROR": "機器人似乎出了點小差錯，請稍後再試 🙏",
 }
@@ -114,6 +118,11 @@ class VideoSummaryClient:
                     time.monotonic() + self.CACHE_TTL_SECONDS,
                     result,
                 )
+        try:
+            # 短期成本追蹤：只記實際打到 n8n 的分析（快取命中不計），失敗不影響摘要
+            summary_report.append_record(video_id, result)
+        except Exception as e:
+            print(f"[{self.__class__.__name__}] 寫入成本追蹤報告失敗（不影響摘要）：{e}")
         return result
 
     def _request(self, video_id):
@@ -147,4 +156,9 @@ class VideoSummaryClient:
                 f"body 鍵：{list(body.keys())}"
             )
             return {"ok": False, "error_code": "SUMMARY_FAILED"}
-        return {"ok": False, "error_code": str(body.get("error_code") or "UPSTREAM_ERROR")}
+        return {
+            "ok": False,
+            "error_code": str(body.get("error_code") or "UPSTREAM_ERROR"),
+            # 失敗也可能已花費 LLM tokens（如備援路徑判定為音樂），帶給成本報告
+            "stats": body.get("stats"),
+        }

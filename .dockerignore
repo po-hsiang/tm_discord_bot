@@ -6,3 +6,4 @@
 *.pyc
 .dockerignore
 .env
+reports/
