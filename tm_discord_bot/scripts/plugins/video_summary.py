@@ -59,11 +59,15 @@ def build_error_message(result):
 def build_embed(result):
     """把 n8n 摘要結果組成 Discord Embed（description 上限 4096，超長時截斷）。
 
-    summary 契約：{"重點大綱": [每點一句話, ...]}（2～5 點，由 n8n 端保證）。
+    summary 契約：{"重點大綱": [每點一句話, ...], "影片標籤": "#tag1 #tag2"}
+    （重點 2～4 點由 n8n 端保證；影片標籤為選填單行字串）。
     """
     summary = result.get("summary") or {}
     points = summary.get("重點大綱") or []
     description = "\n".join(f"• {point}" for point in points)
+    tags = str(summary.get("影片標籤") or "").strip()
+    if tags:
+        description = f"{description}\n\n{tags}" if description else tags
     if len(description) > 4000:
         description = description[:4000] + "…\n*（內容過長，已截斷）*"
 

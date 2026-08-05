@@ -65,6 +65,7 @@ class TestBuildEmbed(unittest.TestCase):
             "duration_seconds": 3725,
             "summary": {
                 "重點大綱": ["第一個重點", "第二個重點", "第三個重點"],
+                "影片標籤": "#標籤一 #標籤二",
             },
         }
         result.update(overrides)
@@ -76,9 +77,17 @@ class TestBuildEmbed(unittest.TestCase):
         self.assertEqual(embed.url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         self.assertIn("• 第一個重點", embed.description)
         self.assertIn("• 第三個重點", embed.description)
+        # 影片標籤放在重點條列後（空一行）
+        self.assertTrue(embed.description.endswith("\n\n#標籤一 #標籤二"))
         # 3725 秒 = 1:02:05
         self.assertIn("1:02:05", embed.footer.text)
         self.assertIn("測試頻道", embed.footer.text)
+
+    def test_embed_without_tags(self):
+        result = self._sample_result(summary={"重點大綱": ["重點A", "重點B"]})
+        embed = video_summary.build_embed(result)
+        self.assertIn("• 重點A", embed.description)
+        self.assertNotIn("#", embed.description)
 
     def test_long_description_truncated_within_discord_limit(self):
         result = self._sample_result()
