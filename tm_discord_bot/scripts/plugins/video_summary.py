@@ -9,8 +9,6 @@ import urllib.request
 import discord
 from dotenv import load_dotenv
 
-from . import summary_report
-
 # 本機直跑時從專案根載入 .env；Docker 部署由 compose.yaml 的 env_file 注入
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
@@ -125,11 +123,6 @@ class VideoSummaryClient:
                     time.monotonic() + self.CACHE_TTL_SECONDS,
                     result,
                 )
-        try:
-            # 短期成本追蹤：只記實際打到 n8n 的分析（快取命中不計），失敗不影響摘要
-            summary_report.append_record(video_id, result)
-        except Exception as e:
-            print(f"[{self.__class__.__name__}] 寫入成本追蹤報告失敗（不影響摘要）：{e}")
         return result
 
     def _request(self, video_id):
@@ -163,9 +156,4 @@ class VideoSummaryClient:
                 f"body 鍵：{list(body.keys())}"
             )
             return {"ok": False, "error_code": "SUMMARY_FAILED"}
-        return {
-            "ok": False,
-            "error_code": str(body.get("error_code") or "UPSTREAM_ERROR"),
-            # 失敗也可能已花費 LLM tokens（如備援路徑判定為音樂），帶給成本報告
-            "stats": body.get("stats"),
-        }
+        return {"ok": False, "error_code": str(body.get("error_code") or "UPSTREAM_ERROR")}

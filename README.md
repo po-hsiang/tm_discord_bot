@@ -3,7 +3,7 @@
 一隻為遊戲實況主「老虎喵喵喵（虎喵）」粉絲社群打造的 Discord 互動機器人。
 以「虎喵小粉絲」的人設與好虎粉互動，功能涵蓋 AI 聊天問答（含圖片/貼圖理解）、YouTube 影片快速摘要、每日早安招呼、隨機點歌、吃什麼抽選、抽籤、二選一淘汰賽等。
 
-> 版本：`0.2.3`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜部署：Docker Compose
+> 版本：`0.2.4`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜部署：Docker Compose
 
 **架構**：bot 本體只負責 Discord 連線、指令路由與輕量原生功能，重活外包給微服務——
 AI 能力（模型、人設、工具、對話記憶）在 n8n「Discord AI Agent」工作流；
@@ -154,7 +154,7 @@ docker compose up -d --build
 | --- | --- |
 | Discord | `discord` (discord.py) 2.3+，事件驅動（`on_ready` / `on_message`） |
 | AI 對話 | n8n「Discord AI Agent」工作流（Webhook 微服務）：Gemini 模型＋人設＋工具（搜尋/Wikipedia/計算機/QuickChart/YTMusic MCP）＋按頻道的對話記憶；bot 端僅為 HTTP 客戶端（`ai_agent_client.py`，Header Auth＋60 秒逾時＋降級訊息） |
-| 影片摘要 | n8n「YouTube 影片快速摘要」工作流：yt-music-mcp `/video`（時長/直播預檢）＋`/transcript`（CC 字幕）→ LLM 結構化輸出（重點大綱 2～4 點＋影片標籤）；無 CC 時二層備援：`/audio` 低碼率音訊→Gemini 轉錄摘要 → Gemini 直接看影片；bot 端僅為 HTTP 客戶端（`video_summary.py`，200 秒逾時＋TTL 6 小時快取＋同影片並發去重），另有短期成本追蹤報告（`plugins/summary_report.py` → `reports/`，gitignore 排除） |
+| 影片摘要 | n8n「YouTube 影片快速摘要」工作流：yt-music-mcp `/video`（時長/直播預檢）＋`/transcript`（CC 字幕）→ LLM 結構化輸出（重點大綱 2～4 點＋影片標籤）；無 CC 時二層備援：`/audio` 低碼率音訊→Gemini 轉錄摘要 → Gemini 直接看影片；bot 端僅為 HTTP 客戶端（`video_summary.py`，200 秒逾時＋TTL 6 小時快取＋同影片並發去重） |
 | 試算表 | `pygsheets` + GCP 服務帳戶 |
 | 歌單 | `yt-music-mcp` 微服務（MCP＋REST 雙介面）：載入、快取（TTL 6 小時）、跨歌單搜尋、隨機選歌全在伺服器端；bot 端僅為 HTTP 客戶端（`song_picker.py`），不需 YouTube API Key |
 | 排程 | `asyncio` 常駐迴圈（每 60 秒檢查一次是否到達目標時間） |

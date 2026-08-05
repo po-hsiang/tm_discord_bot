@@ -125,6 +125,8 @@ tm_discord_bot/
 
 14. **（2026-08-05）摘要新增影片標籤**：n8n 端改版摘要風格（重點 2～4 點、每點 34 字內、活網仔口吻）並新增 `summary.影片標籤`（單行字串如「#魟魚 #單性生殖」，選填）；bot 端 `build_embed()` 把標籤放在重點條列下方（空一行），欄位缺漏時自動略過、完全相容舊格式。
 
+15. **（2026-08-05）成本追蹤報告已拆除**（短期觀察結束，主人指示）：`plugins/summary_report.py`、其測試、compose 的 `./reports` volume、summarize() 掛鉤與錯誤路徑的 stats 透傳皆已移除；補記 12 的相關描述自此失效。歷史報告檔仍留在本機 `reports/video_summary_report.html`（gitignore/dockerignore 續留 `reports/` 條目防誤收）。n8n 端回應的 `stats` 欄位仍在（上游忽略未知欄位、無害，日後要觀察成本可直接復用）；該 workflow 內 9 個執行不到的殘留節點（備援閘門/取音訊/檢查音訊/上傳啟動/上傳音訊/檢查上傳/音訊摘要/準備影片摘要/影片摘要）主人尚未決定是否清除。
+
 ## 八、開場動作建議
 
 1. 先確認新路徑下 git 可用（dubious ownership）與 `.venv` 是否需重建。
