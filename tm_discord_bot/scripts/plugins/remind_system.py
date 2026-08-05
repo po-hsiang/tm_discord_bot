@@ -4,6 +4,13 @@ from functools import partial
 import threading
 import asyncio
 
+from plugins.ai_agent_client import API_FAIL_MESSAGE
+
+WEEK_LIST = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+
+# 晚間話題需等 n8n 端工具抓取熱搜與頭條，比一般對話慢，逾時放寬
+NIGHT_TRENDS_TIMEOUT = 120
+
 
 class RemindSystem:
     _instance = None
@@ -58,34 +65,35 @@ class RemindSystem:
                 print(f"[{self.__class__.__name__}] 提醒任務發生錯誤（一分鐘後繼續運作）：{e}")
             await self._sleep_until_next_minute()
 
-    async def _send_morning_call(self, time_str):
+    async def _run_daily_task(self, time_str, channel_key, build_message, task_label):
+        """每天於指定時間執行一次的通用迴圈（早安、晚間話題共用）。
+
+        build_message(now, time_str) 為同步（阻塞）呼叫，移到 worker 執行緒
+        以免凍結事件迴圈；回傳 None 代表本次靜默跳過（不發訊息）。
+        """
         target_time = datetime.strptime(time_str, "%H:%M")
         while True:
             try:
                 now = datetime.now()
                 if now.hour == target_time.hour and now.minute == target_time.minute:
-                    # GPT 與歌單為同步（阻塞）呼叫，移到 worker 執行緒以免凍結事件迴圈
                     loop = asyncio.get_running_loop()
-                    morning_greeting = await loop.run_in_executor(
-                        self.executor,
-                        partial(self.__get_morning_greeting, now.weekday(), time_str),
+                    content = await loop.run_in_executor(
+                        self.executor, partial(build_message, now, time_str)
                     )
-                    channel = self.client.get_channel(
-                        self.config.get("chitchat_channel_id")
-                    )
-                    if channel is None:
-                        print(f"[{self.__class__.__name__}] 找不到閒聊頻道（chitchat_channel_id），本次早安略過")
-                    else:
-                        await channel.send(f"{morning_greeting}")
+                    if content is not None:
+                        channel = self.client.get_channel(self.config.get(channel_key))
+                        if channel is None:
+                            print(f"[{self.__class__.__name__}] 找不到頻道（{channel_key}），本次{task_label}略過")
+                        else:
+                            await channel.send(f"{content}")
             except Exception as e:
-                # 任何例外都不能讓早安任務死亡，記錄後下一分鐘繼續
-                print(f"[{self.__class__.__name__}] 早安任務發生錯誤（一分鐘後繼續運作）：{e}")
+                # 任何例外都不能讓背景任務死亡，記錄後下一分鐘繼續
+                print(f"[{self.__class__.__name__}] {task_label}任務發生錯誤（一分鐘後繼續運作）：{e}")
             # 睡到下一分鐘整點
             await self._sleep_until_next_minute()
 
-    def __get_morning_greeting(self, weekday, time_str):
-        week_list = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
-        question = f"""早安，現在時間是{week_list[weekday]} {time_str}，
+    def __get_morning_greeting(self, now, time_str):
+        question = f"""早安，現在時間是{WEEK_LIST[now.weekday()]} {time_str}，
 想請妳給各位好虎粉一段充滿活力的招呼語！不用特別提到虎喵，妳只需祝福好虎粉就好✨
 每天的招呼語跟 emoji 記得都要有變化，請生成大約 60 個臺灣繁體中文字元左右。"""
         # 走 n8n AI Agent，並使用專屬 session（morning-call）：
@@ -103,9 +111,36 @@ class RemindSystem:
             morning_greeting = f"{answer}\n {song}"
         return morning_greeting
 
+    def __get_night_trends(self, now, time_str):
+        question = f"""現在是{WEEK_LIST[now.weekday()]}晚上十點的「今晚話題」時間！
+請用 tw_trends_news 工具取得台灣目前的熱搜與頭條，整理成貼給頻道好虎粉的閒聊話題：
+1. 完全排除政治相關內容（政黨、選舉、政治人物、政策攻防、兩岸政治等），遇到就跳過不提。
+2. 兇殺、輕生等悲劇社會案件也跳過不提。
+3. 優先挑娛樂、遊戲、動漫、科技、生活、體育類的話題。
+4. 若過濾後沒剩什麼可聊的，就自己起一個輕鬆話題替代，並老實說今晚熱搜比較嚴肅。
+5. 內容記得跟前幾晚做出變化，用活潑的語氣、大約 300 個臺灣繁體中文字元以內，
+結尾丟一個問題帶動大家聊天。"""
+        # 專屬 session（night-trends）：與各頻道記憶隔離，又能看見前幾晚貼過的話題
+        answer = self.ai_agent.ask(
+            question=question,
+            user_id="night-trends",
+            channel_id="night-trends",
+            timeout=NIGHT_TRENDS_TIMEOUT,
+        )
+        if answer == API_FAIL_MESSAGE:
+            # 晚間話題屬錦上添花的推播：來源故障時靜默跳過，不在閒聊頻道貼降級訊息
+            print(f"[{self.__class__.__name__}] 晚間話題取得失敗，今晚靜默跳過")
+            return None
+        return answer
+
     def start(self):
         if self.already_started:
             return
         self.already_started = True
-        self._tasks.append(asyncio.ensure_future(self._send_morning_call("7:30")))
+        self._tasks.append(asyncio.ensure_future(
+            self._run_daily_task("7:30", "chitchat_channel_id", self.__get_morning_greeting, "早安")
+        ))
+        self._tasks.append(asyncio.ensure_future(
+            self._run_daily_task("22:00", "chitchat_channel_id", self.__get_night_trends, "晚間話題")
+        ))
         # self._tasks.append(asyncio.ensure_future(self._remind_message("14:42", "測試用", [0, 1, 2, 3, 4])))

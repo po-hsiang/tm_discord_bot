@@ -39,6 +39,8 @@ class AIAgentClient:
         if not question and not images and not stickers:
             return EMPTY_QUESTION_MESSAGE
 
+        # 呼叫端可傳 timeout 覆寫預設逾時（如晚間話題需等 n8n 端工具抓取，較慢）
+        timeout = kwargs.get("timeout") or self.timeout
         payload = {
             "text": question,
             "user_name": kwargs.get("user_name") or "",
@@ -57,7 +59,7 @@ class AIAgentClient:
                     "X-Webhook-Secret": self.secret,
                 },
             )
-            with urllib.request.urlopen(req, timeout=self.timeout) as res:
+            with urllib.request.urlopen(req, timeout=timeout) as res:
                 body = json.loads(res.read().decode("utf-8"))
             reply = str(body.get("reply") or "").strip()
             if reply:
