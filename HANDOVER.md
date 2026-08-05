@@ -121,6 +121,8 @@ tm_discord_bot/
 
 12. **（2026-08-04）無字幕影片二層備援＋短期成本追蹤報告**：n8n workflow「YouTube 影片快速摘要」的 NO_TRANSCRIPT 分支改為——音樂閘門（標題關鍵字/「 - Topic」頻道→`MUSIC_CONTENT`）→ 時長閘門（>7200 秒→`VIDEO_TOO_LONG`）→ **音訊備援**（yt-music-mcp 新端點 `GET /audio/{id}`：yt-dlp 抽 OGG/Opus 32kbps mono → Gemini Files API 上傳 → 轉錄＋摘要，實測 20 分鐘影片全程約 54 秒、36.8k audio tokens）→ 技術性失敗才走**影片備援**（Gemini 直接吃 YouTube URL，MEDIA_RESOLUTION_LOW）。bot 端已補兩個錯誤文案。**目前模型配置**：CC 路徑＝OpenAI `gpt-5.6-luna`（credential「My Dev」）、備援兩層＝`gemini-3.1-flash-lite`（credential「部門 Gemini API」）。回應多了 `source`（transcript/audio/video）與 `stats`（逐字稿字數/token 用量/模型；stats 是本 session 經 API 直改 4 個 code 節點加上的，備份在當日 scratchpad）。**成本追蹤（短期功能）**：`plugins/summary_report.py` 在每次實際分析後把「影片/片長/字幕/逐字稿字數/結果/Input Tokens/預估 NT$」追加到 `reports/video_summary_report.html`（gitignore 排除、compose 掛 `./reports:/app/reports` volume 持久化；快取命中不記）；**計價常數（模型單價/匯率）寫在該模組開頭，換模型記得同步調整**；不想追蹤時移除 video_summary.py 內的 append_record 呼叫即可。**待整理**：workflow 內有一組上一輪迭代殘留的無入口節點（備援閘門/取音訊/檢查音訊/上傳啟動/上傳音訊/檢查上傳/音訊摘要/準備影片摘要/影片摘要），永遠不會執行、僅視覺干擾，主人同意後可刪。
 
+13. **（2026-08-05）時長閘門收緊＋逾時階梯定案**（主人拍板）：影片摘要的時長上限收為 **70 分鐘（4200 秒）**，且閘門移至 n8n 主路徑（不分有無 CC 一律擋）；超長影片 **bot 端靜默處理**——不回覆、只撤 ⏳（`video_summary.py` 的 `SILENT_ERROR_CODES` 機制，成本報告仍記一列）。逾時階梯：**bot 200 秒（`N8N_YT_SUMMARY_TIMEOUT` 預設值）＞ n8n 全流程目標 190 秒 ＞ yt-music-mcp 音訊抽取 180 秒**——上游比下游寬，留封包與排隊餘裕；後兩層由各自專案的 Agent 維護。
+
 ## 八、開場動作建議
 
 1. 先確認新路徑下 git 可用（dubious ownership）與 `.venv` 是否需重建。

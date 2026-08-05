@@ -8,6 +8,7 @@ from plugins.remind_system import RemindSystem
 from plugins.ai_agent_client import AIAgentClient
 from plugins.auto_reply_system import AutoReplySystem
 from plugins.video_summary import (
+    SILENT_ERROR_CODES,
     VideoSummaryClient,
     build_embed,
     build_error_message,
@@ -145,8 +146,9 @@ async def _handle_video_summary(message, video_id, loop):
 
     if result.get("ok"):
         await message.reply(embed=build_embed(result))
-    else:
+    elif result.get("error_code") not in SILENT_ERROR_CODES:
         await message.reply(build_error_message(result))
+    # 靜默錯誤碼（如超過 70 分鐘的影片）：不處理也不回應，只撤掉 ⏳
 
 
 async def _handle_natural_message(message, user_msg, loop):

@@ -20,10 +20,12 @@ ERROR_MESSAGES = {
     "LIVE_STREAM": "這部影片在直播中，請選擇其他影片 🙏",
     "NO_TRANSCRIPT": "無法取得影片字幕，請選擇其他影片 🙏",
     "MUSIC_CONTENT": "音樂類影片不支援摘要，請選擇其他影片 🙏",
-    "VIDEO_TOO_LONG": "影片超過 2 小時，不支援摘要 🙏",
     "SUMMARY_FAILED": "分析結果不符合預期格式，請再試一次 🙏",
     "UPSTREAM_ERROR": "機器人似乎出了點小差錯，請稍後再試 🙏",
 }
+
+# 這些錯誤碼靜默處理：不回覆使用者（超過 70 分鐘的影片直接不處理，僅入成本報告）
+SILENT_ERROR_CODES = {"VIDEO_TOO_LONG"}
 
 # 支援的三種 YouTube 連結格式（影片 ID 固定 11 碼；/shorts/ 短影片不在此功能範圍）
 _VIDEO_ID_PATTERNS = (
@@ -94,7 +96,8 @@ class VideoSummaryClient:
     def __init__(self):
         self.webhook_url = os.getenv("N8N_YT_SUMMARY_WEBHOOK_URL")
         self.secret = os.getenv("N8N_WEBHOOK_SECRET")
-        self.timeout = int(os.getenv("N8N_YT_SUMMARY_TIMEOUT", "180"))
+        # 逾時階梯最上層：bot 200 > n8n 190 > yt-music-mcp 180（上游留封包餘裕）
+        self.timeout = int(os.getenv("N8N_YT_SUMMARY_TIMEOUT", "200"))
         if not self.webhook_url or not self.secret:
             raise RuntimeError(
                 "缺少 N8N_YT_SUMMARY_WEBHOOK_URL 或 N8N_WEBHOOK_SECRET 環境變數，"

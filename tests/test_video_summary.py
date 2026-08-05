@@ -105,6 +105,11 @@ class TestBuildErrorMessage(unittest.TestCase):
         message = video_summary.build_error_message({})
         self.assertEqual(message, video_summary.ERROR_MESSAGES["UPSTREAM_ERROR"])
 
+    def test_video_too_long_is_silent(self):
+        # 超過 70 分鐘的影片：不回應使用者（main.py 依此集合略過回覆）
+        self.assertIn("VIDEO_TOO_LONG", video_summary.SILENT_ERROR_CODES)
+        self.assertNotIn("VIDEO_TOO_LONG", video_summary.ERROR_MESSAGES)
+
 
 if __name__ == "__main__":
     unittest.main()
