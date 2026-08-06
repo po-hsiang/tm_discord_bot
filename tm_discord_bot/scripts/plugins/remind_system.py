@@ -1,10 +1,13 @@
 from config_utils import read_config_file
 from datetime import datetime
 from functools import partial
-import threading
 import asyncio
+import logging
+import threading
 
 from plugins.ai_agent_client import API_FAIL_MESSAGE
+
+logger = logging.getLogger(__name__)
 
 WEEK_LIST = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
 
@@ -57,12 +60,12 @@ class RemindSystem:
                             self.config.get("test_channel_id")
                         )
                         if channel is None:
-                            print(f"[{self.__class__.__name__}] 找不到提醒頻道（test_channel_id），本次提醒略過")
+                            logger.warning("找不到提醒頻道（test_channel_id），本次提醒略過")
                         else:
                             await channel.send(f"{message_content}")
-            except Exception as e:
+            except Exception:
                 # 任何例外都不能讓背景任務死亡，記錄後下一分鐘繼續
-                print(f"[{self.__class__.__name__}] 提醒任務發生錯誤（一分鐘後繼續運作）：{e}")
+                logger.exception("提醒任務發生錯誤（一分鐘後繼續運作）")
             await self._sleep_until_next_minute()
 
     async def _run_daily_task(self, time_str, channel_key, build_message, task_label):
@@ -83,12 +86,12 @@ class RemindSystem:
                     if content is not None:
                         channel = self.client.get_channel(self.config.get(channel_key))
                         if channel is None:
-                            print(f"[{self.__class__.__name__}] 找不到頻道（{channel_key}），本次{task_label}略過")
+                            logger.warning("找不到頻道（%s），本次%s略過", channel_key, task_label)
                         else:
                             await channel.send(f"{content}")
-            except Exception as e:
+            except Exception:
                 # 任何例外都不能讓背景任務死亡，記錄後下一分鐘繼續
-                print(f"[{self.__class__.__name__}] {task_label}任務發生錯誤（一分鐘後繼續運作）：{e}")
+                logger.exception("%s任務發生錯誤（一分鐘後繼續運作）", task_label)
             # 睡到下一分鐘整點
             await self._sleep_until_next_minute()
 
@@ -131,7 +134,7 @@ class RemindSystem:
         )
         if answer == API_FAIL_MESSAGE:
             # 晚間話題屬錦上添花的推播：來源故障時靜默跳過，不在閒聊頻道貼降級訊息
-            print(f"[{self.__class__.__name__}] 晚間話題取得失敗，今晚靜默跳過")
+            logger.warning("晚間話題取得失敗，今晚靜默跳過")
             return None
         return answer
 

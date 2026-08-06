@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 import os
 
 import requests
@@ -6,6 +7,8 @@ from dotenv import load_dotenv
 
 # 本機直跑時從專案根載入 .env；Docker 部署由 compose.yaml 的 env_file 注入
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
+
+logger = logging.getLogger(__name__)
 
 LOAD_FAIL_MESSAGE = "歌單服務暫時連不上線，請稍後再試 🙏"
 
@@ -36,7 +39,7 @@ class SongPicker:
             resp.raise_for_status()
             songs = resp.json()["songs"]
         except requests.RequestException as e:
-            print(f"[{self.__class__.__name__}] 取歌失敗，之後使用時會再重試：{e}")
+            logger.warning("取歌失敗，之後使用時會再重試：%s", e)
             return LOAD_FAIL_MESSAGE
         return songs[0]["url"] if songs else LOAD_FAIL_MESSAGE
 
@@ -50,7 +53,7 @@ class SongPicker:
             resp.raise_for_status()
             data = resp.json()
         except requests.RequestException as e:
-            print(f"[{self.__class__.__name__}] 搜尋歌單失敗：{e}")
+            logger.warning("搜尋歌單失敗：%s", e)
             return [LOAD_FAIL_MESSAGE]
 
         results = data.get("results") or []

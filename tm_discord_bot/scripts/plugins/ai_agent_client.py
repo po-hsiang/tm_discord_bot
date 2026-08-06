@@ -1,9 +1,12 @@
 from pathlib import Path
 import json
+import logging
 import os
 import urllib.request
 
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # 本機直跑時從專案根載入 .env；Docker 部署由 compose.yaml 的 env_file 注入
 # （容器內沒有 .env 檔案，load_dotenv 對不存在的路徑是 no-op）
@@ -64,8 +67,8 @@ class AIAgentClient:
             reply = str(body.get("reply") or "").strip()
             if reply:
                 return reply
-            print(f"[{self.__class__.__name__}] n8n 回覆為空，body 鍵：{list(body.keys())}")
+            logger.warning("n8n 回覆為空，body 鍵：%s", list(body.keys()))
             return API_FAIL_MESSAGE
         except Exception as e:
-            print(f"[{self.__class__.__name__}] 呼叫 n8n webhook 失敗：{e}")
+            logger.error("呼叫 n8n webhook 失敗：%s", e)
             return API_FAIL_MESSAGE

@@ -1,112 +1,91 @@
-# 🤝 AI 助理交接 Prompt（HANDOVER）
+# 🤝 AI 助理交接文件（HANDOVER）
 
-> **給主人的使用說明**：專案搬移至 `D:\GitPrivate\tm_discord_bot` 並重開 Claude Code session 後，
-> 將本檔**全文複製貼上**作為第一則訊息；或直接輸入「請先完整閱讀專案根目錄的 HANDOVER.md 再開始工作」。
-> 本文件由前一個 session 的 Claude Code 於 2026-07-15 撰寫。
+> **給主人的使用說明**：新開 session 時，請助理「先完整閱讀專案根目錄的 HANDOVER.md 再開始工作」即可。
+> **給接手助理的說明**：正文（一～六節）為**當前現況**，第七節為**歷史紀錄**（凍結不改，新變更往後追加編號）。
+> 正文最後更新：2026-08-06。功能與檔案結構的細節以 `README.md` 為準，本文件記錄 README 沒有的：協作共識、跨服務架構、環境雷點、待辦。
 
 ---
 
-你是接手 `tm_discord_bot` 專案的 AI 助理。前一位助理已與主人合作完成數項任務，以下是完整交接內容，請仔細閱讀並遵循其中的共識與教訓，接續未完成的工作。
-
-## 一、專案是什麼
+## 一、專案是什麼（現況）
 
 - **「虎喵小粉絲」**：為遊戲實況主「老虎喵喵喵（虎喵）」粉絲社群（好虎粉）打造的 Discord 互動機器人。
-- 功能：ChatGPT 人設問答（`!問`/`!gpt`）、搜圖（`!搜圖`，已失效）、抽籤（`!抽`）、吃什麼（`!吃`）、YouTube 點歌（`!聽` 等）、查歌單（`!查歌單`）、二選一淘汰賽（`!21`）、每日 07:30 GPT 早安。
-- 技術棧：Python 3.8（Poetry）＋ discord.py 2.3 ＋ openai 0.27（舊版 SDK）＋ pygsheets ＋ YouTube Data API v3；Docker Compose 部署（TZ=Asia/Taipei、restart: always）。
-- 約 14 個 Python 檔、780 行。進入點 `tm_discord_bot/scripts/main.py`，模組匯入以 `scripts/` 為根（執行時的工作目錄有講究，見 README）。
-- 機敏設定集中在 `tm_discord_bot/json/config.json`（10 個欄位：discord_bot_token、openai_api_key、openai_model、google_credential_file、what_to_eat_url、youtube_developer_key、my_yt_music_playlist_id、assistant/chitchat/test_channel_id）＋ GCP 服務帳戶憑證 JSON。`.gitignore` 以 `*.json` 全部擋掉，未入版控。
-- Git remote：`https://github.com/po-hsiang/tm_discord_bot.git`（主人的**個人** GitHub 帳號）。
+- 功能：混合模式 AI 對話（`!` 指令優先，其餘訊息含圖片/貼圖直達 AI）、YouTube 影片快速摘要（專屬頻道貼連結即觸發）、`!抽`/`!吃`/`!聽`/`!查歌單`/`!21`/`!心結`、每日 07:30 早安、每晚 19:30 台灣熱門話題。
+- 技術棧：Python 3.14（**uv** 管理版本/venv/套件）＋ discord.py 2.7 ＋ pygsheets；**部署主機就是這台 Windows 機器**（Docker Desktop，容器 `tm_discord_bot`，TZ=Asia/Taipei，restart: always）。
+- **bot 端零金鑰設計**：LLM 金鑰只在 n8n、YouTube API Key 只在 yt-music-mcp。機敏設定集中 `.env`（不入版控、env_file 啟動注入），非機敏設定在 `tm_discord_bot/config/config.ini`（入版控）。
+- Git：remote `https://github.com/po-hsiang/tm_discord_bot`（主人**個人**帳號，私有）；commit 身分經 `~/.gitconfig` 的 `includeIf "gitdir/i:D:/GitPrivate/"` **自動**使用個人身分（po-hsiang / 個人 gmail），不需手動切換。
 
-## 二、前一個 session 已完成的工作
+## 二、與主人的協作共識（務必遵守）
 
-1. **全案掃描與分析**（未動任何既有程式邏輯）。
-2. **重寫 `README.md`**：功能指令表、專案結構、config.json 欄位說明、`.env` 設定步驟、Poetry／Docker 啟動方式、安全注意事項、已知限制。
-3. **產出 `project_report.html`**：自包含（無外部資源）的分析報告，含 4 張手繪 SVG（系統架構圖、on_message 流程圖、早安排程流程圖、部署流程圖）、模組/指令一覽、**20 項問題清單（高/中/低分級）**、深淺色主題切換。注意：報告是 `.env` 修正**之前**的快照，其中問題 #1（寫死金鑰）已修復。
-4. **修復問題 #1 — 寫死的 Google API Key**（原在 `youtube_handler.py:13` 明碼）：
-   - 新增 `.env`（存放 `YOUTUBE_API_KEY`，已加入 `.gitignore` 與 `.dockerignore`）與 `.env.example`（範本，入版控）。
-   - `tm_discord_bot/utils/config_utils.py` 匯入時 `load_dotenv(專案根/.env)` —— 這是集中載入點，日後 config.json 的其他機敏資訊也循此遷移。
-   - `youtube_handler.py` 改 `os.getenv("YOUTUBE_API_KEY")`，缺值時拋 `RuntimeError`（含中文指引）。
-   - `python-dotenv = "^1.0"` 已寫入 pyproject.toml 與 poetry.lock，並已裝進 `.venv`。
-   - 已端對端驗證：金鑰載入成功（長度 39）、缺值防呆正常、grep 全案無 `AIzaSy` 殘留。
-5. **Git 身分調查**（詳見第六節）。
+- **語言**：一律臺灣繁體中文。
+- **節奏**：一步一步來——每次聚焦一個任務，做完回報再進下一步；**主人點名的範圍才動手**，其餘只提建議。
+- **對頻文化**：較大的功能或方向改動，先提方案討論、取得共識（「對頻」）後再實作。
+- **完成定義**：實作 → 單元測試通過 → commit → push → 部署（`docker compose up -d --build`）→ 回報。排程/AI 類功能盡量先做一次**真實鏈路實測**再上線。
+- **機敏紀律**：push 前確認無機敏資訊；輸出時**永不印出機敏值**（只印欄位名、布林、長度）。主人瀏覽器：Chrome＝個人 GitHub、Edge＝公司 GitHub。
+- **觀察期事項**：主人說「先觀察／讓子彈飛」的項目（見第五節）不要擅自動工，可在盤點時提醒。
 
-## 三、與主人的協作共識（務必遵守）
+## 三、跨服務架構——「想改什麼，去哪裡改」
 
-- **語言**：一律使用臺灣繁體中文交流與撰寫文件。
-- **節奏**：主人明確喜歡「**一步一步來**」——每次聚焦一個小任務，做完回報再進下一步，不要自作主張擴大範圍。
-- **修改權限**：第一輪任務曾要求「不異動任何程式碼」；之後已授權修改（.env 隔離任務）。原則：**主人點名的範圍才動手**，其餘只提建議。
-- **問題處理順序共識**：安全（金鑰）→ 穩定性（事件迴圈阻塞、啟動脆弱）→ 架構（重複實例、config 統一）→ 品質（logging、測試）。
-- **git 身分切換**：已提供方案但**主人尚未決定**，不要擅自更改任何 git config。
+bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯層是最常見的白工，先查這張表：
 
-## 四、踩過的雷與必須傳承的經驗（環境陷阱）
+| 想改什麼 | 去哪裡改 |
+| --- | --- |
+| AI 人設、模型、工具、對話記憶 | n8n「Discord AI Agent」工作流（id `vlZLOnZI69bLfqXk`，編輯 `http://localhost:5678/workflow/vlZLOnZI69bLfqXk`）；bot 端只是 HTTP 客戶端 `ai_agent_client.py` |
+| 早安/晚間話題的內容風格（Prompt） | bot 端 `plugins/remind_system.py`（改完需重建部署） |
+| 影片摘要的模型與提詞 | n8n「YouTube 影片快速摘要」工作流（id `t2OrIkAIr29Qws3S`；**存檔即生效**，不用動 bot） |
+| 歌單載入/快取/搜尋、影片資訊/字幕/音訊端點 | `yt-music-mcp` 微服務（**另一專案的 Agent 維護**，這邊只提需求） |
+| 台灣熱搜來源（`tw_trends_news` 工具） | n8n 端工具（主人另行維護的工作流） |
+| 頻道 ID 等非機敏設定 | `config/config.ini`（改完需重建部署） |
+| 機敏鍵（token/密鑰/URL） | `.env`（改完 `docker compose up -d` 重建容器即可，不必 --build） |
 
-1. **Git dubious ownership**：舊路徑資料夾的 Windows 擁有者 SID 與目前使用者不同，git 指令會失敗。解法：以 `git -c safe.directory="<repo路徑>" <指令>` 內聯繞過（不落地全域設定）。搬到 `D:\GitPrivate` 後若再出現，同樣處理或建議主人執行 `git config --global --add safe.directory D:/GitPrivate/tm_discord_bot`。
-2. **⚠️ 工作區有大量「未 commit 的historical 工作」**：最後一次 commit 是 **2024-02-08**，此後 `compose.yaml`、`openai_api.py`、`remind_system.py`、`pyproject.toml`、`poetry.lock` 的修改與多個新檔（`youtube_handler.py`、`analyzer.py`、`video analysis.py`、`utils/`、`config/`）都**只存在於工作區**。**絕對不要 `git checkout`/`git reset` 這些檔案**，會毀掉兩年多的未提交工作。
-3. **機敏資訊輸出限制**：印出 config.json 的值（即使截斷）會被安全分類器擋下。只印**欄位名稱**、布林值或長度，永遠不要印憑證內容。
-4. **`poetry run python` 在 Git Bash 下會靜默無輸出**（原因不明）——改直接呼叫 `./.venv/Scripts/python.exe`。
-5. **搬家後 `.venv` 大概率會壞**（venv 內含絕對路徑）：在新路徑先跑 `poetry install` 重建，不要直接沿用。
-6. **系統 Python（C:\Python38，3.8.5）沒有專案相依套件**（如 youtube_transcript_api），測試務必用專案 `.venv`。
-7. **檔名地雷**：`plugins/video analysis.py` 檔名含空格，shell 迴圈與 import 都會炸，處理檔案清單時記得加引號。
-8. **Windows 主控台 cp950**：Python 印中文可能變亂碼（僅顯示問題，邏輯不受影響）；讀寫檔案一律明確指定 `encoding="utf-8"`。
-9. **Browser 面板開 `file://` 頁面需逐次核准**，無法直接截圖驗證 —— 改用程式做 HTML 結構驗證（標籤配對、SVG 數量）。
-10. **`poetry add --lock` 只更新 lock 不安裝**，之後要 `poetry install --no-root` 才會進 venv。
+- **連線拓撲**：bot 容器 → n8n 走 `host.docker.internal:5678`（Header Auth：`X-Webhook-Secret`）；bot → yt-music-mcp 走外部 docker 網路 `ai-net` 以服務名 `http://yt-music-mcp:8765` 直連（該服務只綁宿主 127.0.0.1，host.docker.internal **打不到**）。
+- **AI 記憶 session**（n8n Simple Memory，以 channel_id 為 key）：頻道對話＝頻道 ID；早安＝`morning-call`；晚間話題＝`night-trends`。**測試 AI 改動請用隔離 session**（如 `trends-night-test`），不要污染正式記憶。
 
-## 五、未完成的待辦（依共識的優先順序）
+## 四、環境雷點（仍有效）
 
-完整 20 項清單見 `project_report.html` 第 07 節，以下是尚未處理的重點：
+1. **程式與 config.ini 都是 `COPY . /app` 進映像**：任何修改都要 `docker compose up -d --build`，單純 restart 無效。
+2. **機敏資訊輸出限制**：印出機敏值（即使截斷）會被安全分類器擋下，只印欄位名/布林/長度。
+3. **Git Bash 路徑改寫**：`/app/...` 會被改成 `D:/Program Files/Git/app/...`——`docker exec` 時加 `MSYS_NO_PATHCONV=1`。
+4. **Windows 主控台 cp950**：跑 Python 腳本印中文請加 `PYTHONIOENCODING=utf-8`；讀寫檔案一律指定 `encoding="utf-8"`。
+5. **n8n 公開 API 的 `PUT /workflows`** 會拒絕含未知鍵的 `settings`（400），更新工作流時要過濾到允許的鍵。
+6. **編輯檔案前先 Read**：主人可能自己動過檔案（曾因此把頻道 ID 貼成兩倍長）。
+7. **`yt-playlist-sorter` 容器是主人的排程服務，勿動。**
+8. 模組以 `scripts/` 為根匯入（`from plugins.xxx import ...`）；repo 的 `tests/` 內已示範 `sys.path` 處理方式。
 
-- **（主人自辦，可提醒）** 到 GCP Console 重新產生曾明碼外露的 YouTube API Key 並加 API 限制，更新至 `.env`。
-- **（建議下一步）版控整理**：金鑰已移除，可以協助主人規劃將累積的修改分批 commit。
-- **高 #2**：OpenAI 同步呼叫（含 `time.sleep` 重試）在 async 事件內執行會凍結整個事件迴圈 → `asyncio.to_thread()` 或升級 openai ≥1.0 用 AsyncOpenAI。
-- **高 #3**：啟動時同步抓試算表＋整份歌單，外部服務故障就起不來，配 `restart: always` 會無限重啟 → 延遲載入＋失敗降級。
-- **高 #4**：`scripts/config_utils.py` 開檔未指定 utf-8；讀檔失敗回傳 None 造成後續 AttributeError → fail-fast。
-- **高 #5**：早安背景任務例外後靜默死亡 → try/except＋log 或改 `discord.ext.tasks`。
-- **中**：重複實例化（main 與 AutoReplySystem 各建一套，歌單抓兩次、GPT 歷史不同步）→ 依賴注入；輪詢漂移；淘汰賽全域共用狀態；資料只在啟動載入；Python 3.8 EOL＋openai 0.27 升級；`!查歌單` 用 `[5:]` 切字會吃字；`!搜圖` 依賴的 source.unsplash.com 已停業；兩份重複的 config_utils。
-- **低**：analyzer.py 引用未定義變數無法執行、video analysis.py 檔名空格（開發中程式碼建議移出主線）；print → logging；tests/ 掛零＋無 CI；Docker 映像含金鑰 JSON（改 env/volume）；魔術數字集中管理。
-- **可選**：把 config.json 其他機敏值（discord token、openai key）也遷入 `.env`（載入點已備好）。
+## 五、待辦與觀察項（2026-08-06 現況）
 
-## 六、Git 身分現況（主人尚未決定，只可建議不可動手）
+**觀察中（主人指示先不動，可提醒）**
+- **AI 呼叫節流**：混合模式下頻道訊息零節流直達 LLM（成本/濫用風險），主人先觀察使用狀況再決定。
+- **舊 YouTube API Key**：曾明碼外露的那把 Key 已無任何服務使用，可在 GCP Console 直接刪除（主人自辦）。
 
-- 全域：`pohsiangjuan` /（**公司信箱**，略）；此 repo 無 local 覆寫。
-- 矛盾點：commit 掛公司 email，卻推到個人帳號 po-hsiang 的 GitHub → 貢獻牆可能不計入。
-- 認證：HTTPS ＋ Git Credential Manager（`credential.helper = manager`）；`~/.ssh/config` 沒有 GitHub 別名（現有的是公司伺服器跳板設定，勿動）。
-- 已提供的方案：① repo 內 `git config user.name/email` 手動切；② `~/.gitconfig` 用 `includeIf "gitdir/i:D:/GitPrivate/"` 自動切個人身分（搬家後路徑正好適合）；③ 推送認證用 remote URL 帶帳號（`https://po-hsiang@github.com/...`）或 SSH 別名。
+**待辦（依價值排序）**
+- **GitHub Actions CI**：tests/ 已有單元測試但無 CI，一個小 workflow（uv sync → unittest）即可把關。
+- **n8n 端 `tw_trends_news` 擴充**：熱搜 3→5、頭條 3→5（已擬好交辦 prompt，見第七節補記 17；bot 端不依賴條數，n8n 可獨立上線）。
+- **`!重載` 指令**：「吃什麼」清單目前要重啟才會重載。
+- **淘汰賽 per-channel 狀態**：現為全頻道共用一場（實際影響小）。
+- **ai_worker 壅塞觀察**：聊天 AI、影片摘要（最長 200 秒）、晚間話題共用 4 執行緒，極端情況會互相排隊。
 
-## 七、當前檔案結構（搬家後根目錄為 D:\GitPrivate\tm_discord_bot）
+## 六、測試與部署
 
-```
-tm_discord_bot/
-├── .env                ← 新增（機敏，git/docker 皆忽略；內含 YOUTUBE_API_KEY）
-├── .env.example        ← 新增（範本，入版控）
-├── .gitignore          ← 已加 .env
-├── .dockerignore       ← 已加 .env
-├── HANDOVER.md         ← 本交接文件
-├── README.md           ← 本次重寫
-├── project_report.html ← 本次新增（分析報告，含 20 項問題清單）
-├── Dockerfile / compose.yaml
-├── pyproject.toml / poetry.lock  ← 已加 python-dotenv ^1.0
-├── .venv/              ← 搬家後需 poetry install 重建
-└── tm_discord_bot/
-    ├── config/config.ini          （youtube api url 等非機敏設定）
-    ├── json/                      （config.json＋GCP 憑證，不入版控）
-    ├── scripts/
-    │   ├── main.py                （進入點）
-    │   ├── config_utils.py        （待修：無 utf-8、回傳 None）
-    │   ├── google_sheet_utils.py
-    │   └── plugins/               （8 個運作中模組＋3 個開發中：youtube_handler、
-    │                                analyzer（損壞）、video analysis.py（檔名含空格））
-    └── utils/config_utils.py      ← 已改：匯入時 load_dotenv(專案根/.env)
-```
+- **單元測試**：repo 根目錄 `uv run python -m unittest discover -s tests`（不依賴 .env 與外部服務）。
+- **部署**：`docker compose up -d --build`；驗證 `docker logs tm_discord_bot --since 2m` 看到「機器人「…」已上線」。
+- **日誌**：全專案使用 `logging`（`main.py` 以 `client.run(..., root_logger=True)` 統一格式），docker logs 內所有訊息含時間戳；背景任務例外會帶 traceback（`logger.exception`）。
+- **版號慣例**：每次功能 commit 同步遞增 `pyproject.toml` 與 README 頂部徽章的版本號。
+- **commit 訊息**：臺灣繁體中文、一行主旨（必要時補條列），身分自動為個人。
 
-## 補記（2026-07-15，接手 session 更新）
+## 七、歷次改動紀錄（歷史，凍結不改；新變更往後追加編號）
 
-> ⚠️ 本節之後的內容若與此補記衝突，以補記為準。
+> ⚠️ 補記 1～17 撰寫時的「第四／五／六／七節」指的是**舊版正文**（2026-07-15 版，可在 git 歷史 `e96ddaa` 之前查看），與現行章節無關。內容若與現行正文衝突，以正文為準。
 
 1. **已全面改用 uv 管理**（取代 Poetry）：`pyproject.toml` 改為 PEP 621 格式、新增 `uv.lock` 與 `.python-version`（釘 3.8）、`poetry.lock` 已移除、Dockerfile 改用 uv 建置、README 同步更新。本文件中所有 `poetry ...` 指令請改用 `uv sync` / `uv run python ...`。第四節第 4、10 點的 Poetry 雷點已不適用；**`uv run` 在 Git Bash 下輸出正常**（已驗證）。
+
 2. **搬家後 `.git` 資料夾不在新路徑**：`D:\GitPrivate\tm_discord_bot` 目前不是 git 倉庫（推測搬移時未複製 `.git`，舊路徑可能仍保有完整歷史）。第四節第 1、2 點與第六節的 git 事項，需等主人把 `.git` 搬回或說明處理方式後才能進行。
+
 3. `.venv` 已在新路徑以 `uv sync` 重建（Python 3.8.5，來自 C:\Python38），匯入煙霧測試、`.env` 載入（金鑰長度 39）、全案 byte-compile 皆通過。
+
 4. **（2026-07-31 更新）2023–2024 舊歷史已從 GitHub 救回**：搬遷時遺失的只是本機 `.git`，遠端 `po-hsiang/tm_discord_bot`（私有）仍保存 2023-05-11～2024-02-08 共 18 個 commit。已將本地重建的歷史「嫁接」其上（快照樹逐位元組不變、fast-forward 推送、未使用 force），本地分支改名 `main` 對齊遠端，現與遠端完全同步。第四節第 2 點的「未提交工作」警語已成歷史——一切都在版控與遠端備份中了。推送前已以真實機敏值比對全歷史 110 個 blob：僅模型名稱誤中，金鑰零外洩，`.env`／`config.json`／GCP 憑證從未被追蹤。原先記載：已 `git init` 並建立基線 commit（`fc34bc9`，嫁接後為 `98cefbb`）。**第六節的 git 身分議題已解決**：主人採方案 ②，`~/.gitconfig` 以 `includeIf "gitdir/i:D:/GitPrivate/"` 引入 `~/.gitconfig-personal`（po-hsiang / 個人 gmail），本 repo 全部 commit 皆為個人身分；另 `credential.useHttpPath = true` 的區段名已修正為 `[credential "https://github.com"]`（原本缺 `https://` 不會生效）。尚未設定 remote、未推送。
+
 5. **第五節的高優先 #2／#3／#4／#5 已全部修復**（commit `a432429`、`0649858`）：config fail-fast＋utf-8、阻塞呼叫移至單執行緒 worker（Python 3.8 用 run_in_executor）、歌單與吃什麼清單延遲載入＋失敗降級＋on_ready 背景預載、早安任務 try/except 防呆。AutoReplySystem 已支援注入共用實例（main.py 傳入），歌單不再抓兩次。
+
 6. **中優先四項已修復並部署**（commit `8d46f76`，2026-07-16）：GPT 對話歷史污染（重試/失敗零殘留、成對裁剪、早安改走 `ask_question_without_memory`）、`!查歌單` 切字吃字、排程輪詢漂移（睡到分鐘整點）、指令參數防呆（`!抽` 帶參數、`!問`/`!搜圖` 空參數）。**部署主機就是這台 Windows 機器**（Docker Desktop，容器 `tm_discord_bot`），已以新映像重建並確認上線（discord.py 2.7.1 連線正常、PYTHONUNBUFFERED 已加，docker logs 即時可見）。主人已表示 YouTube API Key 暫不更換（專案未分享過）。剩餘待辦：資料刷新機制、淘汰賽 per-channel、Python/openai 升級、config 整併、`!搜圖` 處置、logging、測試等中低優先項目。
 
 7. **（2026-07-31）AI 功能已抽離為 n8n 微服務**：`!問`/`!gpt`（含圖片/貼圖）與每日早安改走 n8n「Discord AI Agent」工作流（Gemini 3.5 Flash＋人設＋工具＋按頻道 Simple Memory，早安用獨立 `morning-call` session）。bot 端新增 `plugins/ai_agent_client.py`（Header Auth、60 秒逾時、失敗降級），AI 指令走獨立 4 執行緒池不卡原生指令。`openai_api.py` 與 openai 套件已退役、`!搜圖` 指令已移除。webhook 已加 Header Auth（密鑰在 `.env` 的 `N8N_WEBHOOK_SECRET`；ngrok 公開網址不再裸奔）。bot 容器經 `host.docker.internal` 直連宿主機 n8n，機敏環境變數由 compose `env_file` 注入。**雷點**：n8n 公開 API 的 `PUT /workflows` 會拒絕含未知鍵的 `settings`（400），更新工作流時要過濾到允許的鍵。
@@ -131,8 +110,11 @@ tm_discord_bot/
 
 17. **（2026-08-06）晚間話題改版**（首播成功後主人回饋）：時間 22:00 → **19:30**（與早安 07:30 恰隔 12 小時）；Prompt 改版——去開場白與結尾互動邀請、第一行一句話總結今晚熱搜氛圍＋每話題一行 emoji 條列（2～4 個）、語氣改鄉民/活網仔（不低俗不嘲諷）、全篇 150 字內。已用隔離 session（`trends-night-test`）實測新 Prompt，產出命中理想格式。另擬請 n8n 專案的 Agent 把 `tw_trends_news` 擴充為熱搜前 5＋頭條前 5（bot 端 Prompt 只挑 2～4 個、不依賴條數，n8n 端可獨立擇期上線）。
 
+18. **（2026-08-06）文件大掃除＋print→logging**：HANDOVER 正文（一～八節）全面重寫為現況（舊版內容見 git 歷史，`e96ddaa` 之前的版本），`project_report.html` 移出版控（2026-07-15 的分析報告快照，內容已全數過時；git 歷史可找回）。`scripts/` 全域 13 處 `print` 改為模組級 `logging`（`getLogger(__name__)`＋warning/error 分級；背景任務例外改 `logger.exception` 帶 traceback），`main.py` 以 `client.run(..., root_logger=True)` 讓全專案 log 統一 discord.py 的時間戳格式。主人指示：AI 呼叫節流與舊 YouTube API Key 的 GCP 清理**先觀察不動**。
+
 ## 八、開場動作建議
 
-1. 先確認新路徑下 git 可用（dubious ownership）與 `.venv` 是否需重建。
-2. 用 `git -c safe.directory=... status --short` 對照第四節第 2 點，確認未提交工作完好。
-3. 向主人回報你已讀完交接文件，詢問要從第五節哪一項開始（依共識預設建議：版控整理或高優先 #2）。
+1. 讀 `README.md`（功能與結構）與本檔正文（共識、架構對照、雷點、待辦）。
+2. `git status` 確認工作區乾淨；`uv run python -m unittest discover -s tests` 確認測試全綠。
+3. `docker ps`＋`docker logs tm_discord_bot --since 24h` 檢查容器健康與兩個排程（07:30 早安、19:30 晚間話題）是否正常發送。
+4. 向主人回報就緒，等待點名任務（可順帶提醒第五節的觀察項與待辦）。

@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 import asyncio
+import logging
 
 from plugins.song_picker import SongPicker
 from plugins.eat_what_system import EatWhatSystem
@@ -16,6 +17,8 @@ from plugins.video_summary import (
 )
 from config_utils import read_config_file
 import discord
+
+logger = logging.getLogger(__name__)
 
 CONFIG = read_config_file()
 
@@ -174,7 +177,7 @@ async def _handle_natural_message(message, user_msg, loop):
 
 @client.event
 async def on_ready():
-    print(f"機器人「{client.user}」已上線。")
+    logger.info("機器人「%s」已上線。", client.user)
     asyncio.get_running_loop().run_in_executor(worker, _preload_data)
     reminder_system = RemindSystem(client, ai_agent, yt_song, executor=ai_worker)
     reminder_system.start()  # 啟動鬧鐘功能，定時提醒
@@ -222,4 +225,6 @@ async def on_message(message):
 
 
 if __name__ == "__main__":
-    client.run(CONFIG.get("discord_bot_token"))
+    # root_logger=True：讓 discord.py 的 log 設定（時間戳格式、handler）
+    # 同時套用到本專案所有模組的 logger，全部輸出走同一套格式
+    client.run(CONFIG.get("discord_bot_token"), root_logger=True)

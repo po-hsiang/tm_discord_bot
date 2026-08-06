@@ -1,6 +1,9 @@
 from google_sheet_utils import GoogleSheetUtils
 from config_utils import read_config_file
+import logging
 import random
+
+logger = logging.getLogger(__name__)
 
 CONFIG = read_config_file()
 
@@ -48,7 +51,7 @@ class EatWhatSystem:
             self.meal_dict = meal_dict
             self._loaded = True
         except Exception as e:
-            print(f"[{self.__class__.__name__}] 載入「吃什麼」試算表失敗，之後使用時會再重試：{e}")
+            logger.warning("載入「吃什麼」試算表失敗，之後使用時會再重試：%s", e)
         return self._loaded
 
     def get_meal_commend_list(self):

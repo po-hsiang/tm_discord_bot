@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import logging
 import os
 import re
 import threading
@@ -11,6 +12,8 @@ from dotenv import load_dotenv
 
 # 本機直跑時從專案根載入 .env；Docker 部署由 compose.yaml 的 env_file 注入
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
+
+logger = logging.getLogger(__name__)
 
 # 錯誤碼 → 給使用者的文案（錯誤碼由 n8n yt-summary workflow 的回應契約定義）
 ERROR_MESSAGES = {
@@ -143,7 +146,7 @@ class VideoSummaryClient:
             with urllib.request.urlopen(req, timeout=self.timeout) as res:
                 body = json.loads(res.read().decode("utf-8"))
         except Exception as e:
-            print(f"[{self.__class__.__name__}] 呼叫 n8n yt-summary 失敗：{e}")
+            logger.error("呼叫 n8n yt-summary 失敗：%s", e)
             return {"ok": False, "error_code": "UPSTREAM_ERROR"}
 
         if not isinstance(body, dict):
@@ -151,9 +154,6 @@ class VideoSummaryClient:
         if body.get("ok"):
             if isinstance(body.get("summary"), dict):
                 return body
-            print(
-                f"[{self.__class__.__name__}] n8n 回應缺 summary，"
-                f"body 鍵：{list(body.keys())}"
-            )
+            logger.warning("n8n 回應缺 summary，body 鍵：%s", list(body.keys()))
             return {"ok": False, "error_code": "SUMMARY_FAILED"}
         return {"ok": False, "error_code": str(body.get("error_code") or "UPSTREAM_ERROR")}
