@@ -129,6 +129,8 @@ tm_discord_bot/
 
 16. **（2026-08-05）每晚 22:00 台灣熱門話題推播**：`RemindSystem` 新增第二個每日任務——經 n8n AI Agent 呼叫主人另行開發的工具 `tw_trends_news`（台灣 Google 熱搜前 3 名含搜尋量與相關新聞＋頭條前 3 條）取得時事，整理成閒聊話題發到 `chitchat_channel_id`。**政治過濾走 bot 端 Prompt、n8n 端不動**（對頻共識：工具保持通用）——排除政治與兇殺/輕生等悲劇社會案件、正向清單（娛樂/遊戲/動漫/科技/生活/體育優先）、無料時自起輕鬆話題替代；實測 Gemini 依此正確跳過國際政治與悲傷新聞。獨立 `night-trends` 記憶 session（與 morning-call 同招，讓連續幾晚內容有變化）。實作面：早安與晚間話題共用新抽出的 `_run_daily_task()` 通用每日迴圈（builder 回傳 None＝本次靜默跳過——晚間話題屬錦上添花，AI 故障時不在閒聊頻道貼降級訊息；早安維持原本會貼降級文字的行為）；`ai_agent_client.ask()` 新增可選 `timeout` 覆寫（晚間話題 120 秒＝`NIGHT_TRENDS_TIMEOUT`，工具抓取較慢）。新增 `tests/test_remind_system.py`（7 測試，不依賴 .env）。
 
+17. **（2026-08-06）晚間話題改版**（首播成功後主人回饋）：時間 22:00 → **19:30**（與早安 07:30 恰隔 12 小時）；Prompt 改版——去開場白與結尾互動邀請、第一行一句話總結今晚熱搜氛圍＋每話題一行 emoji 條列（2～4 個）、語氣改鄉民/活網仔（不低俗不嘲諷）、全篇 150 字內。已用隔離 session（`trends-night-test`）實測新 Prompt，產出命中理想格式。另擬請 n8n 專案的 Agent 把 `tw_trends_news` 擴充為熱搜前 5＋頭條前 5（bot 端 Prompt 只挑 2～4 個、不依賴條數，n8n 端可獨立擇期上線）。
+
 ## 八、開場動作建議
 
 1. 先確認新路徑下 git 可用（dubious ownership）與 `.venv` 是否需重建。

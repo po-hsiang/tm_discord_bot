@@ -112,14 +112,16 @@ class RemindSystem:
         return morning_greeting
 
     def __get_night_trends(self, now, time_str):
-        question = f"""現在是{WEEK_LIST[now.weekday()]}晚上十點的「今晚話題」時間！
-請用 tw_trends_news 工具取得台灣目前的熱搜與頭條，整理成貼給頻道好虎粉的閒聊話題：
+        question = f"""現在是{WEEK_LIST[now.weekday()]}晚上七點半的「今晚話題」時間！
+請用 tw_trends_news 工具取得台灣目前的熱搜與頭條，幫頻道的好虎粉「劃重點」：
 1. 完全排除政治相關內容（政黨、選舉、政治人物、政策攻防、兩岸政治等），遇到就跳過不提。
 2. 兇殺、輕生等悲劇社會案件也跳過不提。
-3. 優先挑娛樂、遊戲、動漫、科技、生活、體育類的話題。
-4. 若過濾後沒剩什麼可聊的，就自己起一個輕鬆話題替代，並老實說今晚熱搜比較嚴肅。
-5. 內容記得跟前幾晚做出變化，用活潑的語氣、大約 300 個臺灣繁體中文字元以內，
-結尾丟一個問題帶動大家聊天。"""
+3. 優先挑娛樂、遊戲、動漫、科技、生活、體育類，選出 2～4 個最有梗的話題。
+4. 格式：不要開場問候、也不要結尾的互動邀請；第一行用一句話點出今晚熱搜的整體氛圍，
+接著每個話題獨立一行，以貼切的 emoji 開頭，寫成「話題：一句話重點或吐槽」。
+5. 語氣像臺灣的活網仔／鄉民，可自然使用網路流行語，但不低俗、不嘲諷或攻擊任何人。
+6. 若過濾後沒剩什麼可聊的，就用一句話老實說今晚熱搜比較嚴肅，再自起一個輕鬆話題。
+7. 內容記得跟前幾晚做出變化，全篇 150 個臺灣繁體中文字元以內。"""
         # 專屬 session（night-trends）：與各頻道記憶隔離，又能看見前幾晚貼過的話題
         answer = self.ai_agent.ask(
             question=question,
@@ -141,6 +143,6 @@ class RemindSystem:
             self._run_daily_task("7:30", "chitchat_channel_id", self.__get_morning_greeting, "早安")
         ))
         self._tasks.append(asyncio.ensure_future(
-            self._run_daily_task("22:00", "chitchat_channel_id", self.__get_night_trends, "晚間話題")
+            self._run_daily_task("19:30", "chitchat_channel_id", self.__get_night_trends, "晚間話題")
         ))
         # self._tasks.append(asyncio.ensure_future(self._remind_message("14:42", "測試用", [0, 1, 2, 3, 4])))
