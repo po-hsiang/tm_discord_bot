@@ -1,0 +1,27 @@
+# CI：每次 push / PR 自動跑單元測試（測試不依賴 .env 與外部服務，無需任何 secret）
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: # 保留手動觸發入口（Actions 頁籤可按）
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # uv 會依 .python-version 自動安裝 Python 3.14，並以 uv.lock 還原相依
+      - name: 安裝 uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 安裝相依套件
+        run: uv sync --frozen
+
+      - name: 執行單元測試
+        run: uv run python -m unittest discover -s tests -v
