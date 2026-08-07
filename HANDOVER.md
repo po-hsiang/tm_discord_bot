@@ -58,8 +58,9 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 - **舊 YouTube API Key**：曾明碼外露的那把 Key 已無任何服務使用，可在 GCP Console 直接刪除（主人自辦）。
 
 **待辦（依價值排序）**
-- **GitHub Actions CI**：tests/ 已有單元測試但無 CI，一個小 workflow（uv sync → unittest）即可把關。
+- **`!投票賽` 原型試玩回饋**：僅測試頻道啟用（補記 20），等主人試玩後決定是否調參上正式頻道。
 - **n8n 端 `tw_trends_news` 擴充**：熱搜 3→5、頭條 3→5（已擬好交辦 prompt，見第七節補記 17；bot 端不依賴條數，n8n 可獨立上線）。
+- **n8n 端 `tw_weather` 工具**：交辦提詞已給主人（補記 20）；工具上線後 bot 端調整早安 Prompt 播報天氣。
 - **`!重載` 指令**：「吃什麼」清單目前要重啟才會重載。
 - **淘汰賽 per-channel 狀態**：現為全頻道共用一場（實際影響小）。
 - **ai_worker 壅塞觀察**：聊天 AI、影片摘要（最長 200 秒）、晚間話題共用 4 執行緒，極端情況會互相排隊。
@@ -113,6 +114,8 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 18. **（2026-08-06）文件大掃除＋print→logging**：HANDOVER 正文（一～八節）全面重寫為現況（舊版內容見 git 歷史，`e96ddaa` 之前的版本），`project_report.html` 移出版控（2026-07-15 的分析報告快照，內容已全數過時；git 歷史可找回）。`scripts/` 全域 13 處 `print` 改為模組級 `logging`（`getLogger(__name__)`＋warning/error 分級；背景任務例外改 `logger.exception` 帶 traceback），`main.py` 以 `client.run(..., root_logger=True)` 讓全專案 log 統一 discord.py 的時間戳格式。主人指示：AI 呼叫節流與舊 YouTube API Key 的 GCP 清理**先觀察不動**。
 
 19. **（2026-08-07）穩定性三連發**（主人核可的高優先項）：①排程可觀測性——`_run_daily_task` 發送成功後記 `INFO`（任務名＋字元數），docker logs 即可稽核兩個排程，不用翻 Discord；②晚間話題**單次重試**——首次失敗（逾時/瞬斷/空回覆）先 `NIGHT_TRENDS_RETRY_DELAY`＝60 秒緩衝再重打一次（給 n8n/LLM 喘息，主人特別叮囑間隔別太短），仍失敗才靜默跳過；發送在 `_run_daily_task` 只執行一次，重試不會重複貼文；③compose 加 **docker log rotation**（json-file，10MB × 5 檔）。測試 24/24（含新的重試成功/重試仍失敗案例，`time.sleep` 已 mock 不會真等 60 秒）。同回合亦向主人說明 GitHub Actions CI 對個人帳號的影響範圍，等主人核可後另行上線。
+
+20. **（2026-08-07）CI 上線＋按鈕投票淘汰賽原型**：①**GitHub Actions CI**（`.github/workflows/ci.yml`：push/PR/手動觸發，setup-uv → `uv sync --frozen` → unittest；測試不依賴 .env 故無需任何 GitHub secret，push 前已本機模擬「無 .env」環境驗證）——第五節待辦的 CI 項目完成。②**`!投票賽` 原型**（`plugins/vote_tournament.py`）：8 強按鈕投票淘汰賽——discord.ui 按鈕、全頻道一人一票（ephemeral 回覆、開票前保密、可改票）、每輪 30 秒最高票晉級、平手/無人投票隨機（「貓咪擲硬幣」）；**僅測試頻道啟用**（main.py 以 `test_channel_id` 守門），試玩參數 `BRACKET_SIZE`／`ROUND_SECONDS` 在模組頂部，正式上線與否等主人試玩後對頻；與 `!21` 打字版並存。純邏輯（計票/晉級/輪次名）與 Discord UI 分離，`tests/test_vote_tournament.py` 9 個測試。③創意清單其餘決議：開台通知不做（主人已有第三方）；`tw_weather` 工具交辦提詞已擬給主人轉交 n8n 端 Agent（中央氣象署 F-C0032-001、輸入縣市選填、需主人註冊免費授權碼），工具上線後 bot 端再調整早安 Prompt 播報天氣。
 
 ## 八、開場動作建議
 

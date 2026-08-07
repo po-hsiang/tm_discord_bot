@@ -15,6 +15,8 @@ from plugins.video_summary import (
     build_error_message,
     extract_video_id,
 )
+from plugins.vote_tournament import START_COMMAND as VOTE_START_COMMAND
+from plugins.vote_tournament import VoteTournament
 from config_utils import read_config_file
 import discord
 
@@ -38,6 +40,8 @@ yt_song = SongPicker()
 ai_agent = AIAgentClient()
 auto_reply_system = AutoReplySystem(what_to_eat=what_to_eat)
 video_summary = VideoSummaryClient()
+# 🧪 按鈕投票淘汰賽原型：候選來源與 !21 相同（吃什麼清單），僅測試頻道啟用
+vote_game = VoteTournament(what_to_eat.get_total_answers_list)
 
 # 摘要進行中的影片（video_id → Future）：同影片同時被多人貼上時共用同一個請求，
 # 不重複打 n8n / LLM；完成後自動移除（成功結果的 TTL 快取在 plugin 內）
@@ -217,6 +221,10 @@ async def on_message(message):
         user_msg = user_msg.replace("！", "!")
 
     if user_msg.startswith("!"):
+        # 🧪 按鈕投票淘汰賽原型：僅測試頻道啟用，未上線正式頻道
+        if user_msg == VOTE_START_COMMAND and channel_id == CONFIG.get("test_channel_id"):
+            await vote_game.start(message.channel, loop, worker)
+            return
         # 1) 特定指令優先
         await _handle_command(message, user_msg, loop)
     else:

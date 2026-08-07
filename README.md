@@ -3,7 +3,7 @@
 一隻為遊戲實況主「老虎喵喵喵（虎喵）」粉絲社群打造的 Discord 互動機器人。
 以「虎喵小粉絲」的人設與好虎粉互動，功能涵蓋 AI 聊天問答（含圖片/貼圖理解）、YouTube 影片快速摘要、每日早安招呼、每晚台灣熱門話題、隨機點歌、吃什麼抽選、抽籤、二選一淘汰賽等。
 
-> 版本：`0.2.8`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜部署：Docker Compose
+> 版本：`0.2.9`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜部署：Docker Compose
 
 **架構**：bot 本體只負責 Discord 連線、指令路由與輕量原生功能，重活外包給微服務——
 AI 能力（模型、人設、工具、對話記憶）在 n8n「Discord AI Agent」工作流；
@@ -35,6 +35,7 @@ AI 能力（模型、人設、工具、對話記憶）在 n8n「Discord AI Agent
 | `!聽`、`!歌`、`!聽歌`、`!listen`、`!song` | 從虎喵的 YouTube 歌單隨機推薦一首歌 | yt-music-mcp 微服務 |
 | `!查歌單 <關鍵字>` | 跨**全部歌單**搜尋標題或頻道名稱含關鍵字的歌曲（標示所屬歌單、自動分段避開 Discord 2000 字上限） | yt-music-mcp 微服務 |
 | `!21` | 開始 16 強二選一淘汰賽，之後輸入 `左`/`A` 或 `右`/`B` 逐輪選出冠軍 | Google Sheets 候選清單 |
+| `!投票賽` 🧪 | **原型，僅測試頻道**：8 強按鈕投票淘汰賽——全頻道按按鈕投票（一人一票、可改票、開票前保密），每輪 30 秒最高票晉級，平手隨機 | Google Sheets 候選清單 |
 | `!心結` | 彩蛋固定回覆 | 內建 |
 
 > 舊的 `!問`／`!gpt` 已退役——直接說話即可；打了也會收到轉換提示。
@@ -87,6 +88,7 @@ tm_discord_bot/
             ├── eat_what_system.py       # Google Sheets 讀取吃什麼清單
             ├── pull_system.py           # 加權抽籤 + 保底
             ├── two_choices_one_system.py # 二選一淘汰賽狀態機
+            ├── vote_tournament.py       # 按鈕投票淘汰賽（🧪 原型，僅測試頻道）
             └── remind_system.py         # 早安 / 晚間話題 / 定時提醒（Singleton）
 ```
 
