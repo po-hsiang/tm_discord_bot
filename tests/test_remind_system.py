@@ -11,20 +11,26 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 from plugins import ai_agent_client  # noqa: E402
 from plugins.ai_agent_client import API_FAIL_MESSAGE  # noqa: E402
-from plugins.remind_system import NIGHT_TRENDS_TIMEOUT, RemindSystem  # noqa: E402
+from plugins.remind_system import (  # noqa: E402
+    NIGHT_TRENDS_RETRY_DELAY,
+    NIGHT_TRENDS_TIMEOUT,
+    RemindSystem,
+)
 
 MONDAY_NIGHT = datetime(2026, 8, 3, 22, 0)
 MONDAY_MORNING = datetime(2026, 8, 3, 7, 30)
 
 
 class FakeAgent:
-    def __init__(self, reply):
-        self.reply = reply
+    def __init__(self, *replies):
+        # 可傳多個回覆模擬「第一次失敗、第二次成功」；超過就重複最後一個
+        self.replies = list(replies)
         self.calls = []
 
     def ask(self, *args, **kwargs):
         self.calls.append(kwargs)
-        return self.reply
+        index = min(len(self.calls) - 1, len(self.replies) - 1)
+        return self.replies[index]
 
 
 class FakeSongChooser:
@@ -51,6 +57,8 @@ class TestNightTrends(unittest.TestCase):
         result = rs._RemindSystem__get_night_trends(MONDAY_NIGHT, "22:00")
 
         self.assertEqual(result, "今晚話題來囉！")
+        # 一次就成功時不會多打第二次
+        self.assertEqual(len(agent.calls), 1)
         call = agent.calls[-1]
         self.assertEqual(call["user_id"], "night-trends")
         self.assertEqual(call["channel_id"], "night-trends")
@@ -68,10 +76,30 @@ class TestNightTrends(unittest.TestCase):
         self.assertIn("悲劇社會案件", question)
         self.assertIn("星期一", question)
 
-    def test_api_failure_returns_none_for_silent_skip(self):
-        rs = make_remind_system(FakeAgent(API_FAIL_MESSAGE))
+    def test_first_failure_retries_once_and_posts_retry_answer(self):
+        agent = FakeAgent(API_FAIL_MESSAGE, "重試後拿到的話題！")
+        rs = make_remind_system(agent)
 
-        self.assertIsNone(rs._RemindSystem__get_night_trends(MONDAY_NIGHT, "22:00"))
+        with mock.patch("plugins.remind_system.time.sleep") as fake_sleep:
+            result = rs._RemindSystem__get_night_trends(MONDAY_NIGHT, "22:00")
+
+        self.assertEqual(result, "重試後拿到的話題！")
+        self.assertEqual(len(agent.calls), 2)
+        # 重試前有留緩衝間隔，讓 n8n／LLM 喘息
+        fake_sleep.assert_called_once_with(NIGHT_TRENDS_RETRY_DELAY)
+
+    def test_api_failure_after_retry_returns_none_for_silent_skip(self):
+        agent = FakeAgent(API_FAIL_MESSAGE)
+
+        with mock.patch("plugins.remind_system.time.sleep") as fake_sleep:
+            result = make_remind_system(agent)._RemindSystem__get_night_trends(
+                MONDAY_NIGHT, "22:00"
+            )
+
+        self.assertIsNone(result)
+        # 只重試一次（共打兩次）就放棄，避免無限重打
+        self.assertEqual(len(agent.calls), 2)
+        fake_sleep.assert_called_once()
 
 
 class TestMorningGreetingUnchanged(unittest.TestCase):

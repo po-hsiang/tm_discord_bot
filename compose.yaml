@@ -21,6 +21,12 @@ services:
     networks:
       - default
       - ai-net
+    # 長期運行（restart: always）的容器日誌設上限：10MB × 5 檔，最多佔 50MB
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     restart: always
 
 networks:

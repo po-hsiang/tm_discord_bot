@@ -4,6 +4,7 @@ from functools import partial
 import asyncio
 import logging
 import threading
+import time
 
 from plugins.ai_agent_client import API_FAIL_MESSAGE
 
@@ -13,6 +14,8 @@ WEEK_LIST = ["星期一", "星期二", "星期三", "星期四", "星期五", "�
 
 # 晚間話題需等 n8n 端工具抓取熱搜與頭條，比一般對話慢，逾時放寬
 NIGHT_TRENDS_TIMEOUT = 120
+# 首次失敗後的重試間隔：留給 n8n／LLM 足夠的緩衝喘息，不急著連打
+NIGHT_TRENDS_RETRY_DELAY = 60
 
 
 class RemindSystem:
@@ -89,6 +92,8 @@ class RemindSystem:
                             logger.warning("找不到頻道（%s），本次%s略過", channel_key, task_label)
                         else:
                             await channel.send(f"{content}")
+                            # 成功也留一筆：docker logs 即可稽核排程健康度，不用翻 Discord
+                            logger.info("%s已發送（%d 字元）", task_label, len(content))
             except Exception:
                 # 任何例外都不能讓背景任務死亡，記錄後下一分鐘繼續
                 logger.exception("%s任務發生錯誤（一分鐘後繼續運作）", task_label)
@@ -126,17 +131,25 @@ class RemindSystem:
 6. 若過濾後沒剩什麼可聊的，就用一句話老實說今晚熱搜比較嚴肅，再自起一個輕鬆話題。
 7. 內容記得跟前幾晚做出變化，全篇 150 個臺灣繁體中文字元以內。"""
         # 專屬 session（night-trends）：與各頻道記憶隔離，又能看見前幾晚貼過的話題
-        answer = self.ai_agent.ask(
-            question=question,
-            user_id="night-trends",
-            channel_id="night-trends",
-            timeout=NIGHT_TRENDS_TIMEOUT,
-        )
-        if answer == API_FAIL_MESSAGE:
-            # 晚間話題屬錦上添花的推播：來源故障時靜默跳過，不在閒聊頻道貼降級訊息
-            logger.warning("晚間話題取得失敗，今晚靜默跳過")
-            return None
-        return answer
+        # 一天只有一次機會，偶發故障（逾時、瞬斷）先休息一分鐘再重試一次；
+        # 發送動作在 _run_daily_task 只會執行一次，重試不會造成重複貼文
+        for attempt in range(2):
+            answer = self.ai_agent.ask(
+                question=question,
+                user_id="night-trends",
+                channel_id="night-trends",
+                timeout=NIGHT_TRENDS_TIMEOUT,
+            )
+            if answer != API_FAIL_MESSAGE:
+                return answer
+            if attempt == 0:
+                logger.warning(
+                    "晚間話題第一次取得失敗，%d 秒後重試一次", NIGHT_TRENDS_RETRY_DELAY
+                )
+                time.sleep(NIGHT_TRENDS_RETRY_DELAY)
+        # 晚間話題屬錦上添花的推播：重試仍故障就靜默跳過，不在閒聊頻道貼降級訊息
+        logger.warning("晚間話題重試後仍失敗，今晚靜默跳過")
+        return None
 
     def start(self):
         if self.already_started:

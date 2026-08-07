@@ -68,7 +68,7 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 
 - **單元測試**：repo 根目錄 `uv run python -m unittest discover -s tests`（不依賴 .env 與外部服務）。
 - **部署**：`docker compose up -d --build`；驗證 `docker logs tm_discord_bot --since 2m` 看到「機器人「…」已上線」。
-- **日誌**：全專案使用 `logging`（`main.py` 以 `client.run(..., root_logger=True)` 統一格式），docker logs 內所有訊息含時間戳；背景任務例外會帶 traceback（`logger.exception`）。
+- **日誌**：全專案使用 `logging`（`main.py` 以 `client.run(..., root_logger=True)` 統一格式），docker logs 內所有訊息含時間戳；背景任務例外會帶 traceback（`logger.exception`）；排程發送成功會記 INFO（可直接稽核 07:30／19:30 是否正常）。容器日誌有輪替上限（compose 的 logging 設定，10MB × 5 檔）。
 - **版號慣例**：每次功能 commit 同步遞增 `pyproject.toml` 與 README 頂部徽章的版本號。
 - **commit 訊息**：臺灣繁體中文、一行主旨（必要時補條列），身分自動為個人。
 
@@ -111,6 +111,8 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 17. **（2026-08-06）晚間話題改版**（首播成功後主人回饋）：時間 22:00 → **19:30**（與早安 07:30 恰隔 12 小時）；Prompt 改版——去開場白與結尾互動邀請、第一行一句話總結今晚熱搜氛圍＋每話題一行 emoji 條列（2～4 個）、語氣改鄉民/活網仔（不低俗不嘲諷）、全篇 150 字內。已用隔離 session（`trends-night-test`）實測新 Prompt，產出命中理想格式。另擬請 n8n 專案的 Agent 把 `tw_trends_news` 擴充為熱搜前 5＋頭條前 5（bot 端 Prompt 只挑 2～4 個、不依賴條數，n8n 端可獨立擇期上線）。
 
 18. **（2026-08-06）文件大掃除＋print→logging**：HANDOVER 正文（一～八節）全面重寫為現況（舊版內容見 git 歷史，`e96ddaa` 之前的版本），`project_report.html` 移出版控（2026-07-15 的分析報告快照，內容已全數過時；git 歷史可找回）。`scripts/` 全域 13 處 `print` 改為模組級 `logging`（`getLogger(__name__)`＋warning/error 分級；背景任務例外改 `logger.exception` 帶 traceback），`main.py` 以 `client.run(..., root_logger=True)` 讓全專案 log 統一 discord.py 的時間戳格式。主人指示：AI 呼叫節流與舊 YouTube API Key 的 GCP 清理**先觀察不動**。
+
+19. **（2026-08-07）穩定性三連發**（主人核可的高優先項）：①排程可觀測性——`_run_daily_task` 發送成功後記 `INFO`（任務名＋字元數），docker logs 即可稽核兩個排程，不用翻 Discord；②晚間話題**單次重試**——首次失敗（逾時/瞬斷/空回覆）先 `NIGHT_TRENDS_RETRY_DELAY`＝60 秒緩衝再重打一次（給 n8n/LLM 喘息，主人特別叮囑間隔別太短），仍失敗才靜默跳過；發送在 `_run_daily_task` 只執行一次，重試不會重複貼文；③compose 加 **docker log rotation**（json-file，10MB × 5 檔）。測試 24/24（含新的重試成功/重試仍失敗案例，`time.sleep` 已 mock 不會真等 60 秒）。同回合亦向主人說明 GitHub Actions CI 對個人帳號的影響範圍，等主人核可後另行上線。
 
 ## 八、開場動作建議
 
