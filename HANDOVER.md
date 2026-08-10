@@ -9,7 +9,7 @@
 ## 一、專案是什麼（現況）
 
 - **「虎喵小粉絲」**：為遊戲實況主「老虎喵喵喵（虎喵）」粉絲社群（好虎粉）打造的 Discord 互動機器人。
-- 功能：混合模式 AI 對話（`!` 指令優先，其餘訊息含圖片/貼圖直達 AI）、YouTube 影片快速摘要（專屬頻道貼連結即觸發）、`!抽`/`!吃`/`!聽`/`!查歌單`/`!21`/`!投票賽`/`!心結`、每日 07:30 早安（含全台天氣播報）、每晚 19:30 台灣熱門話題。
+- 功能：混合模式 AI 對話（`!` 指令優先，其餘訊息含圖片/貼圖直達 AI）、YouTube 影片快速摘要（專屬頻道貼連結即觸發）、`!抽`/`!吃`/`!聽`/`!查歌單`/`!心結`、每日 07:30 早安（含全台天氣播報）、每晚 19:30 台灣熱門話題。
 - 技術棧：Python 3.14（**uv** 管理版本/venv/套件）＋ discord.py 2.7 ＋ pygsheets；**部署主機就是這台 Windows 機器**（Docker Desktop，容器 `tm_discord_bot`，TZ=Asia/Taipei，restart: always）。
 - **bot 端零金鑰設計**：LLM 金鑰只在 n8n、YouTube API Key 只在 yt-music-mcp。機敏設定集中 `.env`（不入版控、env_file 啟動注入），非機敏設定在 `tm_discord_bot/config/config.ini`（入版控）。
 - Git：remote `https://github.com/po-hsiang/tm_discord_bot`（主人**個人**帳號，私有）；commit 身分經 `~/.gitconfig` 的 `includeIf "gitdir/i:D:/GitPrivate/"` **自動**使用個人身分（po-hsiang / 個人 gmail），不需手動切換。
@@ -60,7 +60,6 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 **待辦（依價值排序）**
 - **n8n 端 `tw_trends_news` 擴充**：熱搜 3→5、頭條 3→5（已擬好交辦 prompt，見第七節補記 17；bot 端不依賴條數，n8n 可獨立上線）。
 - **`!重載` 指令**：「吃什麼」清單目前要重啟才會重載。
-- **淘汰賽 per-channel 狀態**：現為全頻道共用一場（實際影響小）。
 - **ai_worker 壅塞觀察**：聊天 AI、影片摘要（最長 200 秒）、晚間話題共用 4 執行緒，極端情況會互相排隊。
 
 ## 六、測試與部署
@@ -118,6 +117,8 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 21. **（2026-08-10）n8n AI Agent webhook 路徑遷移**：n8n 端工作流更名「Discord AI Agent」→「**TM AI Agent**」（改為多客戶端共用，id 不變 `vlZLOnZI69bLfqXk`），webhook 路徑 `discord-ai-agent` → `tm-ai-agent`（舊路徑已 404）。bot 端只改 `.env` 的 `N8N_AGENT_WEBHOOK_URL`（密鑰與 request/response 契約完全不變），`docker compose up -d` 重建後於**容器內**以 `AIAgentClient` 實測新路徑（隔離 session `url-migration-test`）確認 AI 正常回覆。`.env.example`、README、HANDOVER 第三節、client docstring 的名稱已同步。
 
 22. **（2026-08-10）`!投票賽` 轉正＋早安加天氣播報**：①主人於測試頻道試玩 `!投票賽` 後核可**轉正**——main.py 移除 `test_channel_id` 守門（助手/測試頻道皆可玩），賽制維持 8 強、每輪 30 秒；一次只開一場（跨頻道共用 `is_running`，同 `!21` 的既知限制）。②n8n 端 `tw_weather` 工具已由主人上線（縣市全名選填、未指定預設全台總覽、「台/臺」有正規化）——實測全台總覽約 8 秒、指定縣市約 4 秒，遠低於預設 60 秒逾時故**早安不需逾時覆寫**；早安 Prompt 加入天氣播報指示（一兩句重點＋貼心提醒、自然融入不像制式氣象報告、**取不到就略過照常打招呼**的降級指示），全篇字數 60→約 100 字元。已用隔離 session（`weather-test`／`morning-test`）以正式 Prompt 原文實測，產出格式命中。第五節的投票賽試玩與 tw_weather 兩項待辦自此結案。
+
+23. **（2026-08-10）兩套淘汰賽全數移除**（主人指示：Discord Bot 不需要此功能，讓專案乾淨一些）：`!21` 打字版（`two_choices_one_system.py`）與 `!投票賽` 按鈕版（`vote_tournament.py`，補記 20/22 剛上線旋即下架）連同 `tests/test_vote_tournament.py` 一併刪除，git 歷史可找回。連帶清理：`auto_reply_system.py` 不再需要注入 `what_to_eat`（原僅供淘汰賽候選清單），建構子簡化；`main.py` 移除遊戲路由——非指令訊息現在**直接**進 AI 對話（原本會先檢查淘汰賽的左/右輸入）。第五節「淘汰賽 per-channel 狀態」待辦一併結案。README 的混合模式說明、指令表、結構樹、已知限制同步更新。
 
 ## 八、開場動作建議
 

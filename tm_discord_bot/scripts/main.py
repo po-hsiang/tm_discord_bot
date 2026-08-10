@@ -15,8 +15,6 @@ from plugins.video_summary import (
     build_error_message,
     extract_video_id,
 )
-from plugins.vote_tournament import START_COMMAND as VOTE_START_COMMAND
-from plugins.vote_tournament import VoteTournament
 from config_utils import read_config_file
 import discord
 
@@ -29,7 +27,7 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 
 # 單一執行緒 worker：原生指令的外部呼叫（Google Sheets／歌單微服務）移出事件迴圈，
-# 只開一條執行緒讓共享狀態（淘汰賽進度、吃什麼清單載入）維持序列化存取
+# 只開一條執行緒讓共享狀態（吃什麼清單載入）維持序列化存取
 worker = ThreadPoolExecutor(max_workers=1)
 # AI 專用執行緒池：n8n agent 帶工具可能跑數十秒，用獨立執行緒池
 # 讓 AI 慢回覆不會卡住 !吃、!抽 等即時指令（AI 狀態都在 n8n 端，無共享狀態疑慮）
@@ -38,10 +36,8 @@ ai_worker = ThreadPoolExecutor(max_workers=4)
 what_to_eat = EatWhatSystem()
 yt_song = SongPicker()
 ai_agent = AIAgentClient()
-auto_reply_system = AutoReplySystem(what_to_eat=what_to_eat)
+auto_reply_system = AutoReplySystem()
 video_summary = VideoSummaryClient()
-# 按鈕投票淘汰賽：候選來源與 !21 相同（吃什麼清單）
-vote_game = VoteTournament(what_to_eat.get_total_answers_list)
 
 # 摘要進行中的影片（video_id → Future）：同影片同時被多人貼上時共用同一個請求，
 # 不重複打 n8n / LLM；完成後自動移除（成功結果的 TTL 快取在 plugin 內）
@@ -159,14 +155,7 @@ async def _handle_video_summary(message, video_id, loop):
 
 
 async def _handle_natural_message(message, user_msg, loop):
-    # 非指令訊息：先看是不是進行中的淘汰賽輸入（左/A/右/B），否則視為自然語言直接交給 AI
-    game_reply = await loop.run_in_executor(
-        worker, partial(auto_reply_system.two_choice_game.play_or_start_game, user_msg)
-    )
-    if game_reply:
-        await send_in_chunks(message.channel, f"{message.author.mention}\n{game_reply}")
-        return
-
+    # 非指令訊息：視為自然語言直接交給 AI（含純圖片/貼圖訊息）
     if not user_msg and not message.attachments and not message.stickers:
         return
 
@@ -221,14 +210,10 @@ async def on_message(message):
         user_msg = user_msg.replace("！", "!")
 
     if user_msg.startswith("!"):
-        # 按鈕投票淘汰賽（獨立的 async 流程；一次只開一場，跨頻道共用 is_running 守門）
-        if user_msg == VOTE_START_COMMAND:
-            await vote_game.start(message.channel, loop, worker)
-            return
         # 1) 特定指令優先
         await _handle_command(message, user_msg, loop)
     else:
-        # 2) 沒有指令 → 淘汰賽輸入或自然語言 AI 對話（含純圖片/貼圖訊息）
+        # 2) 沒有指令 → 自然語言 AI 對話（含純圖片/貼圖訊息）
         await _handle_natural_message(message, user_msg, loop)
 
 

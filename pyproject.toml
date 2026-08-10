@@ -1,6 +1,6 @@
 [project]
 name = "tm-discord-bot"
-version = "0.2.10"
+version = "0.2.11"
 description = ""
 readme = "README.md"
 authors = [{ name = "po-hsiang", email = "wsxxcv11733@gmail.com" }]
