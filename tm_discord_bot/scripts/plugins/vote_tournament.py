@@ -6,7 +6,7 @@ import discord
 
 logger = logging.getLogger(__name__)
 
-# 🧪 原型參數：先用 8 強（共 7 輪）試玩，正式上線前再與主人對頻調整
+# 賽制參數：8 強（共 7 輪）、每輪 30 秒（主人於測試頻道試玩後定案）
 BRACKET_SIZE = 8
 ROUND_SECONDS = 30
 

@@ -103,7 +103,9 @@ class RemindSystem:
     def __get_morning_greeting(self, now, time_str):
         question = f"""早安，現在時間是{WEEK_LIST[now.weekday()]} {time_str}，
 想請妳給各位好虎粉一段充滿活力的招呼語！不用特別提到虎喵，妳只需祝福好虎粉就好✨
-每天的招呼語跟 emoji 記得都要有變化，請生成大約 60 個臺灣繁體中文字元左右。"""
+接著請用 tw_weather 工具取得臺灣今日總體天氣，用一兩句話播報重點並附上貼心提醒
+（如帶傘、防曬、保暖），自然融入訊息、不要像制式氣象報告；若天氣暫時取不到就略過、照常打招呼。
+每天的招呼語跟 emoji 記得都要有變化，全篇約 100 個臺灣繁體中文字元左右。"""
         # 走 n8n AI Agent，並使用專屬 session（morning-call）：
         # 與各頻道聊天記憶隔離，又能看見前幾天的招呼語，利於「每天都要有變化」
         answer = self.ai_agent.ask(

@@ -113,6 +113,9 @@ class TestMorningGreetingUnchanged(unittest.TestCase):
         self.assertEqual(call["channel_id"], "morning-call")
         self.assertNotIn("timeout", call)
         self.assertIn("星期一", call["question"])
+        # 天氣播報：指定工具、並要求取不到時降級略過（實測全台總覽約 8 秒，無需放寬逾時）
+        self.assertIn("tw_weather", call["question"])
+        self.assertIn("取不到就略過", call["question"])
         self.assertIn("早安呀！", greeting)
         self.assertIn("(https://youtu.be/abc123)", greeting)
 
