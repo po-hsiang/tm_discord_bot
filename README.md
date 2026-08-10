@@ -6,7 +6,7 @@
 > 版本：`0.2.9`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜部署：Docker Compose
 
 **架構**：bot 本體只負責 Discord 連線、指令路由與輕量原生功能，重活外包給微服務——
-AI 能力（模型、人設、工具、對話記憶）在 n8n「Discord AI Agent」工作流；
+AI 能力（模型、人設、工具、對話記憶）在 n8n「TM AI Agent」工作流（多客戶端共用）；
 歌單能力（載入、快取 TTL 6 小時、多歌單搜尋、隨機選歌）在 `yt-music-mcp`（MCP＋REST 雙介面）；
 影片快速摘要在 n8n「YouTube 影片快速摘要」工作流（串接 yt-music-mcp 的影片資訊/字幕端點＋Gemini 摘要）。
 各服務獨立演進，LLM 金鑰只存在於 n8n、YouTube API Key 只存在於 yt-music-mcp，bot 端零金鑰。
@@ -106,14 +106,14 @@ tm_discord_bot/
 | `GOOGLE_CREDENTIAL_FILE` | 放在 `tm_discord_bot/json/` 內的 GCP 服務帳戶憑證**檔名**，該帳戶需有試算表讀取權限 |
 | `WHAT_TO_EAT_URL` | 「吃什麼」試算表網址，工作表名稱須為 `工作表1`，每一欄第一列為分類名、其下為選項 |
 | `YT_MUSIC_API_URL` | yt-music-mcp 歌單微服務（bot 與其同在 `ai-net` docker 網路，以服務名直連；本機直跑改 `http://127.0.0.1:8765`） |
-| `N8N_AGENT_WEBHOOK_URL` | n8n「Discord AI Agent」webhook（容器經 `host.docker.internal` 直連宿主機） |
+| `N8N_AGENT_WEBHOOK_URL` | n8n「TM AI Agent」webhook（容器經 `host.docker.internal` 直連宿主機） |
 | `N8N_YT_SUMMARY_WEBHOOK_URL` | n8n「YouTube 影片快速摘要」webhook（與 AI Agent 共用 `N8N_WEBHOOK_SECRET`） |
 | `N8N_WEBHOOK_SECRET` | webhook Header Auth 共享密鑰（header 名稱 `X-Webhook-Secret`） |
 | `N8N_API_KEY` | n8n 管理 API 金鑰（開發輔助用，bot 執行期不需要） |
 
 > `.env` 已加入 `.gitignore` 與 `.dockerignore`，不進版控也不進映像；
 > Docker 部署由 `compose.yaml` 的 `env_file` 於**啟動時**注入容器。
-> AI 功能需要宿主機的 n8n 服務在線且「Discord AI Agent」工作流為啟用狀態。
+> AI 功能需要宿主機的 n8n 服務在線且「TM AI Agent」工作流為啟用狀態。
 
 ### 2. 設定 config.ini（非機敏設定，入版控）
 
@@ -156,7 +156,7 @@ docker compose up -d --build
 | 類別 | 使用技術 |
 | --- | --- |
 | Discord | `discord` (discord.py) 2.3+，事件驅動（`on_ready` / `on_message`） |
-| AI 對話 | n8n「Discord AI Agent」工作流（Webhook 微服務）：Gemini 模型＋人設＋工具（搜尋/Wikipedia/計算機/QuickChart/YTMusic MCP/台灣熱搜新聞）＋按頻道的對話記憶；bot 端僅為 HTTP 客戶端（`ai_agent_client.py`，Header Auth＋逾時預設 60 秒、呼叫端可覆寫（晚間話題 120 秒）＋降級訊息） |
+| AI 對話 | n8n「TM AI Agent」工作流（Webhook 微服務，多客戶端共用）：Gemini 模型＋人設＋工具（搜尋/Wikipedia/計算機/QuickChart/YTMusic MCP/台灣熱搜新聞）＋按頻道的對話記憶；bot 端僅為 HTTP 客戶端（`ai_agent_client.py`，Header Auth＋逾時預設 60 秒、呼叫端可覆寫（晚間話題 120 秒）＋降級訊息） |
 | 影片摘要 | n8n「YouTube 影片快速摘要」工作流：yt-music-mcp `/video`（時長/直播預檢）＋`/transcript`（CC 字幕）→ LLM 結構化輸出（重點大綱 2～4 點＋影片標籤）；無 CC 時二層備援：`/audio` 低碼率音訊→Gemini 轉錄摘要 → Gemini 直接看影片；bot 端僅為 HTTP 客戶端（`video_summary.py`，200 秒逾時＋TTL 6 小時快取＋同影片並發去重） |
 | 試算表 | `pygsheets` + GCP 服務帳戶 |
 | 歌單 | `yt-music-mcp` 微服務（MCP＋REST 雙介面）：載入、快取（TTL 6 小時）、跨歌單搜尋、隨機選歌全在伺服器端；bot 端僅為 HTTP 客戶端（`song_picker.py`），不需 YouTube API Key |

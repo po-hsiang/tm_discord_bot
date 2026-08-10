@@ -17,7 +17,7 @@ EMPTY_QUESTION_MESSAGE = "想問什麼呢？請在指令後面接上問題，例
 
 
 class AIAgentClient:
-    """呼叫 n8n「Discord AI Agent」工作流的 HTTP 客戶端。
+    """呼叫 n8n「TM AI Agent」工作流的 HTTP 客戶端。
 
     AI 模型、人設、工具與對話記憶全部由 n8n 端維護（各自獨立演進），
     bot 只負責把訊息與附件轉交過去、把回覆帶回 Discord。

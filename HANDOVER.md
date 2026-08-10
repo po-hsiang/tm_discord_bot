@@ -29,7 +29,7 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 
 | 想改什麼 | 去哪裡改 |
 | --- | --- |
-| AI 人設、模型、工具、對話記憶 | n8n「Discord AI Agent」工作流（id `vlZLOnZI69bLfqXk`，編輯 `http://localhost:5678/workflow/vlZLOnZI69bLfqXk`）；bot 端只是 HTTP 客戶端 `ai_agent_client.py` |
+| AI 人設、模型、工具、對話記憶 | n8n「TM AI Agent」工作流（id `vlZLOnZI69bLfqXk`，編輯 `http://localhost:5678/workflow/vlZLOnZI69bLfqXk`；原名「Discord AI Agent」，2026-08-10 更名並改為多客戶端共用）；bot 端只是 HTTP 客戶端 `ai_agent_client.py` |
 | 早安/晚間話題的內容風格（Prompt） | bot 端 `plugins/remind_system.py`（改完需重建部署） |
 | 影片摘要的模型與提詞 | n8n「YouTube 影片快速摘要」工作流（id `t2OrIkAIr29Qws3S`；**存檔即生效**，不用動 bot） |
 | 歌單載入/快取/搜尋、影片資訊/字幕/音訊端點 | `yt-music-mcp` 微服務（**另一專案的 Agent 維護**，這邊只提需求） |
@@ -116,6 +116,8 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 19. **（2026-08-07）穩定性三連發**（主人核可的高優先項）：①排程可觀測性——`_run_daily_task` 發送成功後記 `INFO`（任務名＋字元數），docker logs 即可稽核兩個排程，不用翻 Discord；②晚間話題**單次重試**——首次失敗（逾時/瞬斷/空回覆）先 `NIGHT_TRENDS_RETRY_DELAY`＝60 秒緩衝再重打一次（給 n8n/LLM 喘息，主人特別叮囑間隔別太短），仍失敗才靜默跳過；發送在 `_run_daily_task` 只執行一次，重試不會重複貼文；③compose 加 **docker log rotation**（json-file，10MB × 5 檔）。測試 24/24（含新的重試成功/重試仍失敗案例，`time.sleep` 已 mock 不會真等 60 秒）。同回合亦向主人說明 GitHub Actions CI 對個人帳號的影響範圍，等主人核可後另行上線。
 
 20. **（2026-08-07）CI 上線＋按鈕投票淘汰賽原型**：①**GitHub Actions CI**（`.github/workflows/ci.yml`：push/PR/手動觸發，setup-uv → `uv sync --frozen` → unittest；測試不依賴 .env 故無需任何 GitHub secret，push 前已本機模擬「無 .env」環境驗證）——第五節待辦的 CI 項目完成。②**`!投票賽` 原型**（`plugins/vote_tournament.py`）：8 強按鈕投票淘汰賽——discord.ui 按鈕、全頻道一人一票（ephemeral 回覆、開票前保密、可改票）、每輪 30 秒最高票晉級、平手/無人投票隨機（「貓咪擲硬幣」）；**僅測試頻道啟用**（main.py 以 `test_channel_id` 守門），試玩參數 `BRACKET_SIZE`／`ROUND_SECONDS` 在模組頂部，正式上線與否等主人試玩後對頻；與 `!21` 打字版並存。純邏輯（計票/晉級/輪次名）與 Discord UI 分離，`tests/test_vote_tournament.py` 9 個測試。③創意清單其餘決議：開台通知不做（主人已有第三方）；`tw_weather` 工具交辦提詞已擬給主人轉交 n8n 端 Agent（中央氣象署 F-C0032-001、輸入縣市選填、需主人註冊免費授權碼），工具上線後 bot 端再調整早安 Prompt 播報天氣。
+
+21. **（2026-08-10）n8n AI Agent webhook 路徑遷移**：n8n 端工作流更名「Discord AI Agent」→「**TM AI Agent**」（改為多客戶端共用，id 不變 `vlZLOnZI69bLfqXk`），webhook 路徑 `discord-ai-agent` → `tm-ai-agent`（舊路徑已 404）。bot 端只改 `.env` 的 `N8N_AGENT_WEBHOOK_URL`（密鑰與 request/response 契約完全不變），`docker compose up -d` 重建後於**容器內**以 `AIAgentClient` 實測新路徑（隔離 session `url-migration-test`）確認 AI 正常回覆。`.env.example`、README、HANDOVER 第三節、client docstring 的名稱已同步。
 
 ## 八、開場動作建議
 
