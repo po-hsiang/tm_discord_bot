@@ -68,7 +68,7 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 - **部署**：`docker compose up -d --build`；驗證 `docker logs tm_discord_bot --since 2m` 看到「機器人「…」已上線」。
 - **日誌**：全專案使用 `logging`（`main.py` 以 `client.run(..., root_logger=True)` 統一格式），docker logs 內所有訊息含時間戳；背景任務例外會帶 traceback（`logger.exception`）；排程發送成功會記 INFO（可直接稽核 07:30／19:30 是否正常）。容器日誌有輪替上限（compose 的 logging 設定，10MB × 5 檔）。
 - **版號慣例**：每次功能 commit 同步遞增 `pyproject.toml` 與 README 頂部徽章的版本號。
-- **commit 訊息**：臺灣繁體中文、一行主旨（必要時補條列），身分自動為個人。
+- **commit 訊息**（2026-08-11 起）：**Conventional Commits v1.0.0** 風格——`type(scope): 描述`，type 用英文小寫（feat/fix/docs/refactor/test/chore/ci/perf），描述用臺灣繁體中文、簡短有力；**非必要不寫 body**；破壞性變更加 `!`。身分自動為個人。
 
 ## 七、歷次改動紀錄（歷史，凍結不改；新變更往後追加編號）
 
