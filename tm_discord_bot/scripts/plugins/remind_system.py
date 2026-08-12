@@ -153,10 +153,12 @@ class RemindSystem:
 2. Steam 部分：從特惠中挑「折扣 50% 以上、或知名大作」，精選 3～5 款，附折扣與台幣價格。
 3. 格式：不要開場問候、也不要結尾的互動邀請；第一行用一句話總結本週值不值得掏錢包，
 接著每款遊戲獨立一行，以貼切的 emoji 開頭，寫成「遊戲名：一句話重點（折扣或價格）」。
-4. 語氣像臺灣的活網仔／鄉民，可自然使用網路流行語（快領、錢包不保），但不低俗。
-5. 若工具回報 GAME_DEALS_UNAVAILABLE 或特惠資料取不到，請只回覆 GAME_DEALS_UNAVAILABLE，
+4. 遊戲名請寫成 Markdown 超連結 [遊戲名](<網址>)：網址一律原樣複製工具提供的「連結」，
+不可自行改寫或猜測；工具沒提供連結的遊戲就只寫名稱。網址外層的角括號 <> 務必保留。
+5. 語氣像臺灣的活網仔／鄉民，可自然使用網路流行語（快領、錢包不保），但不低俗。
+6. 若工具回報 GAME_DEALS_UNAVAILABLE 或特惠資料取不到，請只回覆 GAME_DEALS_UNAVAILABLE，
 不要加任何其他文字。
-6. 全篇 200 個臺灣繁體中文字元以內。"""
+7. 全篇 200 個臺灣繁體中文字元以內（網址不計入字數）。"""
         # 專屬 session（game-deals）：與各頻道記憶隔離，也讓每週的吐槽有變化
         answer = self._ask_with_retry(question, "game-deals", GAME_DEALS_TIMEOUT, "遊戲情報")
         if answer is not None and GAME_DEALS_SENTINEL in answer:

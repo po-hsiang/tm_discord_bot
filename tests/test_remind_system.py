@@ -131,6 +131,10 @@ class TestGameDeals(unittest.TestCase):
         self.assertIn("本週免費", question)
         self.assertIn("下週預告與更遠的項目都不要提", question)
         self.assertIn("折扣 50% 以上", question)
+        # Markdown 連結：角括號抑制 Discord 預覽卡片；工具沒給連結時要能安全降級
+        self.assertIn("[遊戲名](<網址>)", question)
+        self.assertIn("原樣複製", question)
+        self.assertIn("工具沒提供連結的遊戲就只寫名稱", question)
         # 哨兵指示：Agent 平常聊天會把哨兵轉成可愛回覆，排程必須要求原樣回覆才能比對
         self.assertIn("請只回覆 GAME_DEALS_UNAVAILABLE", question)
 

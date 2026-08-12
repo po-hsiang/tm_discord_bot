@@ -122,6 +122,8 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 
 24. **（2026-08-12）每週五 22:00 遊戲特惠情報排程**：n8n 端新工具 `game_deals`（Epic `freeGamesPromotions`＋Steam `featuredcategories` 兩個商店前端公開端點，**皆不需 API Key**；台灣區繁中台幣；雙來源皆故障回哨兵字串 `GAME_DEALS_UNAVAILABLE`）＋bot 端第三個排程任務——發到 `game_deals_channel_id`（【遊戲約約】827594608417439778）。實作面：`_run_daily_task` 加選填 `weekdays` 參數（`_is_due` 靜態方法可測、不傳＝每天，早安/晚間話題行為不變）；晚間話題與遊戲情報共用新抽出的 `_ask_with_retry()`（失敗隔 `AI_RETRY_DELAY`＝60 秒重試一次，常數自 `NIGHT_TRENDS_RETRY_DELAY` 更名）；Prompt 要點——Epic **只報本週免費**（n8n 端提醒 upcoming 含遠期項目，資料特性）、Steam 挑「折扣 50% 以上或知名大作」3～5 款（門檻在 bot 端 Prompt，主人日後想改只動一行）、**哨兵指示**「請只回覆 GAME_DEALS_UNAVAILABLE」（Agent 平常聊天會把哨兵轉成可愛回覆，排程必須原樣回覆才能字串比對靜默跳過）。獨立 `game-deals` session；隔離 session `game-deals-test` 實測 12.6 秒、格式命中。
 
+25. **（2026-08-12）遊戲情報附 Markdown 商店連結**：週五排程 Prompt 加連結指示——遊戲名寫成 `[遊戲名](<網址>)`（**角括號必留**，抑制 Discord 預覽卡片洗版）、網址一律**原樣複製**工具提供的「連結」欄位、**工具沒給連結就只寫名稱**（不亂編網址）。n8n 端 `game_deals` 工具的連結欄位擴充已擬交辦提詞給主人（Epic 用 productSlug/pageSlug 組店頁、Steam 用 app id；可獨立擇期上線）——bot 端 Prompt 先做好相容，已在工具**尚未有**連結欄位的狀態下隔離實測：Agent 正確只寫名稱、零幻覺網址，故先行部署不需等 n8n。對頻決議：Twitch 端無排程不用管；平常聊天不要求列網址，**不需要**做 client 平台區分機制。
+
 ## 八、開場動作建議
 
 1. 讀 `README.md`（功能與結構）與本檔正文（共識、架構對照、雷點、待辦）。
