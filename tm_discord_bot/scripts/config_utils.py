@@ -23,6 +23,7 @@ _CHANNEL_KEYS = (
     "test_channel_id",
     "chitchat_channel_id",
     "video_summary_channel_id",
+    "game_deals_channel_id",
 )
 
 

@@ -12,10 +12,13 @@ logger = logging.getLogger(__name__)
 
 WEEK_LIST = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
 
-# 晚間話題需等 n8n 端工具抓取熱搜與頭條，比一般對話慢，逾時放寬
+# 帶工具的排程任務需等 n8n 端抓取外部資料，比一般對話慢，逾時放寬
 NIGHT_TRENDS_TIMEOUT = 120
+GAME_DEALS_TIMEOUT = 120
 # 首次失敗後的重試間隔：留給 n8n／LLM 足夠的緩衝喘息，不急著連打
-NIGHT_TRENDS_RETRY_DELAY = 60
+AI_RETRY_DELAY = 60
+# n8n 端 game_deals 工具雙來源皆故障時的哨兵字串（排程 Prompt 要求 AI 原樣回覆）
+GAME_DEALS_SENTINEL = "GAME_DEALS_UNAVAILABLE"
 
 
 class RemindSystem:
@@ -71,17 +74,25 @@ class RemindSystem:
                 logger.exception("提醒任務發生錯誤（一分鐘後繼續運作）")
             await self._sleep_until_next_minute()
 
-    async def _run_daily_task(self, time_str, channel_key, build_message, task_label):
-        """每天於指定時間執行一次的通用迴圈（早安、晚間話題共用）。
+    @staticmethod
+    def _is_due(now, target_time, weekdays):
+        """判斷 now 是否命中排程時刻；weekdays 為星期過濾（0=一，None=每天）。"""
+        if weekdays is not None and now.weekday() not in weekdays:
+            return False
+        return now.hour == target_time.hour and now.minute == target_time.minute
+
+    async def _run_daily_task(self, time_str, channel_key, build_message, task_label, weekdays=None):
+        """於指定時間執行的通用迴圈（早安、晚間話題、遊戲情報共用）。
 
         build_message(now, time_str) 為同步（阻塞）呼叫，移到 worker 執行緒
         以免凍結事件迴圈；回傳 None 代表本次靜默跳過（不發訊息）。
+        weekdays 不傳＝每天執行，傳 [4]＝只在星期五執行。
         """
         target_time = datetime.strptime(time_str, "%H:%M")
         while True:
             try:
                 now = datetime.now()
-                if now.hour == target_time.hour and now.minute == target_time.minute:
+                if self._is_due(now, target_time, weekdays):
                     loop = asyncio.get_running_loop()
                     content = await loop.run_in_executor(
                         self.executor, partial(build_message, now, time_str)
@@ -133,24 +144,47 @@ class RemindSystem:
 6. 若過濾後沒剩什麼可聊的，就用一句話老實說今晚熱搜比較嚴肅，再自起一個輕鬆話題。
 7. 內容記得跟前幾晚做出變化，全篇 150 個臺灣繁體中文字元以內。"""
         # 專屬 session（night-trends）：與各頻道記憶隔離，又能看見前幾晚貼過的話題
-        # 一天只有一次機會，偶發故障（逾時、瞬斷）先休息一分鐘再重試一次；
-        # 發送動作在 _run_daily_task 只會執行一次，重試不會造成重複貼文
+        return self._ask_with_retry(question, "night-trends", NIGHT_TRENDS_TIMEOUT, "晚間話題")
+
+    def __get_game_deals(self, now, time_str):
+        question = """現在是星期五晚上十點的「週末遊戲情報」時間！
+請用 game_deals 工具取得本週遊戲特惠，幫【遊戲約約】頻道的好虎粉整理：
+1. Epic 部分：只報「本週免費」的遊戲（附免費領取截止日），下週預告與更遠的項目都不要提。
+2. Steam 部分：從特惠中挑「折扣 50% 以上、或知名大作」，精選 3～5 款，附折扣與台幣價格。
+3. 格式：不要開場問候、也不要結尾的互動邀請；第一行用一句話總結本週值不值得掏錢包，
+接著每款遊戲獨立一行，以貼切的 emoji 開頭，寫成「遊戲名：一句話重點（折扣或價格）」。
+4. 語氣像臺灣的活網仔／鄉民，可自然使用網路流行語（快領、錢包不保），但不低俗。
+5. 若工具回報 GAME_DEALS_UNAVAILABLE 或特惠資料取不到，請只回覆 GAME_DEALS_UNAVAILABLE，
+不要加任何其他文字。
+6. 全篇 200 個臺灣繁體中文字元以內。"""
+        # 專屬 session（game-deals）：與各頻道記憶隔離，也讓每週的吐槽有變化
+        answer = self._ask_with_retry(question, "game-deals", GAME_DEALS_TIMEOUT, "遊戲情報")
+        if answer is not None and GAME_DEALS_SENTINEL in answer:
+            # 工具雙來源皆故障：AI 依指示原樣回覆哨兵字串，本週靜默跳過
+            logger.warning("遊戲情報來源故障（哨兵字串），本週靜默跳過")
+            return None
+        return answer
+
+    def _ask_with_retry(self, question, session, timeout, task_label):
+        """呼叫 AI Agent（專屬 session），失敗時隔 AI_RETRY_DELAY 秒重試一次。
+
+        排程推播一天只有一次機會，偶發故障（逾時、瞬斷）值得多試一次；
+        發送動作在 _run_daily_task 只會執行一次，重試不會造成重複貼文。
+        重試仍失敗回傳 None（呼叫端靜默跳過，不在頻道貼降級訊息）。
+        """
         for attempt in range(2):
             answer = self.ai_agent.ask(
                 question=question,
-                user_id="night-trends",
-                channel_id="night-trends",
-                timeout=NIGHT_TRENDS_TIMEOUT,
+                user_id=session,
+                channel_id=session,
+                timeout=timeout,
             )
             if answer != API_FAIL_MESSAGE:
                 return answer
             if attempt == 0:
-                logger.warning(
-                    "晚間話題第一次取得失敗，%d 秒後重試一次", NIGHT_TRENDS_RETRY_DELAY
-                )
-                time.sleep(NIGHT_TRENDS_RETRY_DELAY)
-        # 晚間話題屬錦上添花的推播：重試仍故障就靜默跳過，不在閒聊頻道貼降級訊息
-        logger.warning("晚間話題重試後仍失敗，今晚靜默跳過")
+                logger.warning("%s第一次取得失敗，%d 秒後重試一次", task_label, AI_RETRY_DELAY)
+                time.sleep(AI_RETRY_DELAY)
+        logger.warning("%s重試後仍失敗，本次靜默跳過", task_label)
         return None
 
     def start(self):
@@ -162,5 +196,10 @@ class RemindSystem:
         ))
         self._tasks.append(asyncio.ensure_future(
             self._run_daily_task("19:30", "chitchat_channel_id", self.__get_night_trends, "晚間話題")
+        ))
+        self._tasks.append(asyncio.ensure_future(
+            self._run_daily_task(
+                "22:00", "game_deals_channel_id", self.__get_game_deals, "遊戲情報", weekdays=[4]
+            )
         ))
         # self._tasks.append(asyncio.ensure_future(self._remind_message("14:42", "測試用", [0, 1, 2, 3, 4])))

@@ -9,7 +9,7 @@
 ## 一、專案是什麼（現況）
 
 - **「虎喵小粉絲」**：為遊戲實況主「老虎喵喵喵（虎喵）」粉絲社群（好虎粉）打造的 Discord 互動機器人。
-- 功能：混合模式 AI 對話（`!` 指令優先，其餘訊息含圖片/貼圖直達 AI）、YouTube 影片快速摘要（專屬頻道貼連結即觸發）、`!抽`/`!吃`/`!聽`/`!查歌單`/`!心結`、每日 07:30 早安（含全台天氣播報）、每晚 19:30 台灣熱門話題。
+- 功能：混合模式 AI 對話（`!` 指令優先，其餘訊息含圖片/貼圖直達 AI）、YouTube 影片快速摘要（專屬頻道貼連結即觸發）、`!抽`/`!吃`/`!聽`/`!查歌單`/`!心結`、每日 07:30 早安（含全台天氣播報）、每晚 19:30 台灣熱門話題、每週五 22:00 遊戲特惠情報。
 - 技術棧：Python 3.14（**uv** 管理版本/venv/套件）＋ discord.py 2.7 ＋ pygsheets；**部署主機就是這台 Windows 機器**（Docker Desktop，容器 `tm_discord_bot`，TZ=Asia/Taipei，restart: always）。
 - **bot 端零金鑰設計**：LLM 金鑰只在 n8n、YouTube API Key 只在 yt-music-mcp。機敏設定集中 `.env`（不入版控、env_file 啟動注入），非機敏設定在 `tm_discord_bot/config/config.ini`（入版控）。
 - Git：remote `https://github.com/po-hsiang/tm_discord_bot`（主人**個人**帳號，私有）；commit 身分經 `~/.gitconfig` 的 `includeIf "gitdir/i:D:/GitPrivate/"` **自動**使用個人身分（po-hsiang / 個人 gmail），不需手動切換。
@@ -33,7 +33,7 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 | 早安/晚間話題的內容風格（Prompt） | bot 端 `plugins/remind_system.py`（改完需重建部署） |
 | 影片摘要的模型與提詞 | n8n「YouTube 影片快速摘要」工作流（id `t2OrIkAIr29Qws3S`；**存檔即生效**，不用動 bot） |
 | 歌單載入/快取/搜尋、影片資訊/字幕/音訊端點 | `yt-music-mcp` 微服務（**另一專案的 Agent 維護**，這邊只提需求） |
-| 台灣熱搜來源（`tw_trends_news` 工具） | n8n 端工具（主人另行維護的工作流） |
+| 台灣熱搜／天氣／遊戲特惠來源（`tw_trends_news`／`tw_weather`／`game_deals` 工具） | n8n 端工具（主人與其 n8n Agent 另行維護） |
 | 頻道 ID 等非機敏設定 | `config/config.ini`（改完需重建部署） |
 | 機敏鍵（token/密鑰/URL） | `.env`（改完 `docker compose up -d` 重建容器即可，不必 --build） |
 
@@ -119,6 +119,8 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 22. **（2026-08-10）`!投票賽` 轉正＋早安加天氣播報**：①主人於測試頻道試玩 `!投票賽` 後核可**轉正**——main.py 移除 `test_channel_id` 守門（助手/測試頻道皆可玩），賽制維持 8 強、每輪 30 秒；一次只開一場（跨頻道共用 `is_running`，同 `!21` 的既知限制）。②n8n 端 `tw_weather` 工具已由主人上線（縣市全名選填、未指定預設全台總覽、「台/臺」有正規化）——實測全台總覽約 8 秒、指定縣市約 4 秒，遠低於預設 60 秒逾時故**早安不需逾時覆寫**；早安 Prompt 加入天氣播報指示（一兩句重點＋貼心提醒、自然融入不像制式氣象報告、**取不到就略過照常打招呼**的降級指示），全篇字數 60→約 100 字元。已用隔離 session（`weather-test`／`morning-test`）以正式 Prompt 原文實測，產出格式命中。第五節的投票賽試玩與 tw_weather 兩項待辦自此結案。
 
 23. **（2026-08-10）兩套淘汰賽全數移除**（主人指示：Discord Bot 不需要此功能，讓專案乾淨一些）：`!21` 打字版（`two_choices_one_system.py`）與 `!投票賽` 按鈕版（`vote_tournament.py`，補記 20/22 剛上線旋即下架）連同 `tests/test_vote_tournament.py` 一併刪除，git 歷史可找回。連帶清理：`auto_reply_system.py` 不再需要注入 `what_to_eat`（原僅供淘汰賽候選清單），建構子簡化；`main.py` 移除遊戲路由——非指令訊息現在**直接**進 AI 對話（原本會先檢查淘汰賽的左/右輸入）。第五節「淘汰賽 per-channel 狀態」待辦一併結案。README 的混合模式說明、指令表、結構樹、已知限制同步更新。
+
+24. **（2026-08-12）每週五 22:00 遊戲特惠情報排程**：n8n 端新工具 `game_deals`（Epic `freeGamesPromotions`＋Steam `featuredcategories` 兩個商店前端公開端點，**皆不需 API Key**；台灣區繁中台幣；雙來源皆故障回哨兵字串 `GAME_DEALS_UNAVAILABLE`）＋bot 端第三個排程任務——發到 `game_deals_channel_id`（【遊戲約約】827594608417439778）。實作面：`_run_daily_task` 加選填 `weekdays` 參數（`_is_due` 靜態方法可測、不傳＝每天，早安/晚間話題行為不變）；晚間話題與遊戲情報共用新抽出的 `_ask_with_retry()`（失敗隔 `AI_RETRY_DELAY`＝60 秒重試一次，常數自 `NIGHT_TRENDS_RETRY_DELAY` 更名）；Prompt 要點——Epic **只報本週免費**（n8n 端提醒 upcoming 含遠期項目，資料特性）、Steam 挑「折扣 50% 以上或知名大作」3～5 款（門檻在 bot 端 Prompt，主人日後想改只動一行）、**哨兵指示**「請只回覆 GAME_DEALS_UNAVAILABLE」（Agent 平常聊天會把哨兵轉成可愛回覆，排程必須原樣回覆才能字串比對靜默跳過）。獨立 `game-deals` session；隔離 session `game-deals-test` 實測 12.6 秒、格式命中。
 
 ## 八、開場動作建議
 
