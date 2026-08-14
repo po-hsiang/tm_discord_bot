@@ -203,6 +203,45 @@ class TestMorningGreetingUnchanged(unittest.TestCase):
         self.assertIn(API_FAIL_MESSAGE, greeting)
 
 
+class TestMorningHolidayEasterEgg(unittest.TestCase):
+    def _question_on(self, morning):
+        agent = FakeAgent("早安呀！")
+        rs = make_remind_system(agent, FakeSongChooser("https://youtu.be/abc123"))
+        rs._RemindSystem__get_morning_greeting(morning, "7:30")
+        return agent.calls[-1]["question"]
+
+    def test_plain_day_has_no_easter_egg_line(self):
+        # 2026-08-03 非節日：Prompt 維持原樣，不出現彩蛋指示
+        question = self._question_on(MONDAY_MORNING)
+        self.assertNotIn("節日彩蛋", question)
+        self.assertNotIn("補假日", question)
+
+    def test_festival_adds_easter_egg_line(self):
+        question = self._question_on(datetime(2026, 9, 25, 7, 30))
+        self.assertIn("「中秋節」", question)
+        self.assertIn("節日彩蛋", question)
+
+    def test_makeup_day_adds_travel_care_line(self):
+        question = self._question_on(datetime(2026, 2, 27, 7, 30))
+        self.assertIn("「和平紀念日」連假的補假日", question)
+        self.assertIn("塞車", question)
+
+    def test_lookup_failure_degrades_to_plain_greeting(self):
+        # 節日查詢炸掉時要吞下例外、照常打招呼，不能拖垮整則早安
+        agent = FakeAgent("早安呀！")
+        rs = make_remind_system(agent, FakeSongChooser("https://youtu.be/abc123"))
+
+        with mock.patch(
+            "plugins.remind_system.get_holiday_info", side_effect=RuntimeError("boom")
+        ):
+            greeting = rs._RemindSystem__get_morning_greeting(
+                datetime(2026, 9, 25, 7, 30), "7:30"
+            )
+
+        self.assertIn("早安呀！", greeting)
+        self.assertNotIn("節日彩蛋", agent.calls[-1]["question"])
+
+
 class TestAskTimeoutOverride(unittest.TestCase):
     def _make_client(self):
         with mock.patch.dict(

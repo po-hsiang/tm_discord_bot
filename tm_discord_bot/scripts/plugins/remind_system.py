@@ -7,6 +7,7 @@ import threading
 import time
 
 from plugins.ai_agent_client import API_FAIL_MESSAGE
+from plugins.holiday_lookup import KIND_MAKEUP, get_holiday_info
 
 logger = logging.getLogger(__name__)
 
@@ -111,10 +112,28 @@ class RemindSystem:
             # 睡到下一分鐘整點
             await self._sleep_until_next_minute()
 
+    @staticmethod
+    def _build_holiday_line(now):
+        """今天若是節日或補假，回傳早安 Prompt 的彩蛋指示（含換行）；平日回傳空字串。
+
+        查詢是本地離線計算，仍防禦性包一層：彩蛋失敗不能拖垮整則早安。
+        """
+        try:
+            info = get_holiday_info(now.date())
+        except Exception:
+            logger.exception("節日查詢失敗，本日照常打招呼（無彩蛋）")
+            return ""
+        if info is None:
+            return ""
+        kind, name = info
+        if kind == KIND_MAKEUP:
+            return f"今天是「{name}」連假的補假日！請體恤大家連假出遊，聊聊塞車、去哪玩之類的話題。\n"
+        return f"今天是「{name}」！請把節日彩蛋自然融入招呼語（應景祝福或節日梗），節日感要明顯。\n"
+
     def __get_morning_greeting(self, now, time_str):
         question = f"""早安，現在時間是{WEEK_LIST[now.weekday()]} {time_str}，
 想請妳給各位好虎粉一段充滿活力的招呼語！不用特別提到虎喵，妳只需祝福好虎粉就好✨
-接著請用 tw_weather 工具取得臺灣今日總體天氣，用一兩句話播報重點並附上貼心提醒
+{self._build_holiday_line(now)}接著請用 tw_weather 工具取得臺灣今日總體天氣，用一兩句話播報重點並附上貼心提醒
 （如帶傘、防曬、保暖），自然融入訊息、不要像制式氣象報告；若天氣暫時取不到就略過、照常打招呼。
 每天的招呼語跟 emoji 記得都要有變化，全篇約 100 個臺灣繁體中文字元左右。"""
         # 走 n8n AI Agent，並使用專屬 session（morning-call）：
