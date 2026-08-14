@@ -1,11 +1,12 @@
 [project]
 name = "tm-discord-bot"
-version = "0.2.14"
+version = "0.2.15"
 description = ""
 readme = "README.md"
 authors = [{ name = "po-hsiang", email = "wsxxcv11733@gmail.com" }]
 requires-python = ">=3.14"
 dependencies = [
+    "cnlunar>=0.2,<1",
     "discord>=2.3.2,<3",
     "holidays>=0.102,<1",
     "pygsheets>=2.0.6,<3",

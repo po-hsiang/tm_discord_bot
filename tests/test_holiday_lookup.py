@@ -58,6 +58,42 @@ class TestPopularFestivals(unittest.TestCase):
         self.assertEqual(get_holiday_info(date(2026, 8, 8)), (KIND_FESTIVAL, "父親節"))
 
 
+class TestLunarFestivals(unittest.TestCase):
+    """農曆人氣節日（cnlunar 離線換算，日期以萬年曆比對過）。"""
+
+    def test_qixi_2026(self):
+        self.assertEqual(get_holiday_info(date(2026, 8, 19)), (KIND_FESTIVAL, "七夕情人節"))
+
+    def test_qixi_2025_in_leap_month_year(self):
+        # 2025 有閏六月，真七夕在閏月之後：換算仍要正確
+        self.assertEqual(get_holiday_info(date(2025, 8, 29)), (KIND_FESTIVAL, "七夕情人節"))
+
+    def test_lantern_festival(self):
+        self.assertEqual(get_holiday_info(date(2026, 3, 3)), (KIND_FESTIVAL, "元宵節"))
+
+    def test_ghost_festival(self):
+        self.assertEqual(get_holiday_info(date(2026, 8, 27)), (KIND_FESTIVAL, "中元節"))
+
+    def test_double_ninth_festival(self):
+        self.assertEqual(get_holiday_info(date(2026, 10, 18)), (KIND_FESTIVAL, "重陽節"))
+
+    def test_leap_month_day_is_not_a_festival(self):
+        # 2006-08-30 為閏七月初七：沒有閏月防呆會被誤判成七夕
+        self.assertIsNone(get_holiday_info(date(2006, 8, 30)))
+
+
+class TestSolarTerms(unittest.TestCase):
+    def test_winter_solstice(self):
+        self.assertEqual(get_holiday_info(date(2026, 12, 22)), (KIND_FESTIVAL, "冬至"))
+
+    def test_start_of_winter(self):
+        self.assertEqual(get_holiday_info(date(2026, 11, 7)), (KIND_FESTIVAL, "立冬"))
+
+    def test_non_whitelisted_term_is_ignored(self):
+        # 2026-03-20 春分：不在白名單（只收立冬、冬至），避免每 15 天就一個彩蛋
+        self.assertIsNone(get_holiday_info(date(2026, 3, 20)))
+
+
 class TestOrdinaryDays(unittest.TestCase):
     def test_plain_day_returns_none(self):
         self.assertIsNone(get_holiday_info(date(2026, 8, 14)))

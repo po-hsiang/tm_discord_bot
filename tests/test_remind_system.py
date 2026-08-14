@@ -221,6 +221,10 @@ class TestMorningHolidayEasterEgg(unittest.TestCase):
         self.assertIn("「中秋節」", question)
         self.assertIn("節日彩蛋", question)
 
+    def test_lunar_festival_adds_easter_egg_line(self):
+        question = self._question_on(datetime(2026, 8, 19, 7, 30))
+        self.assertIn("「七夕情人節」", question)
+
     def test_makeup_day_adds_travel_care_line(self):
         question = self._question_on(datetime(2026, 2, 27, 7, 30))
         self.assertIn("「和平紀念日」連假的補假日", question)
