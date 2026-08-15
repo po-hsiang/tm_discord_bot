@@ -2,9 +2,8 @@ import unittest
 from datetime import datetime
 from unittest import mock
 
-from tm_bot.plugins import ai_agent_client
-from tm_bot.plugins.ai_agent_client import API_FAIL_MESSAGE
-from tm_bot.plugins.remind_system import (
+from tm_bot.clients.ai_agent import API_FAIL_MESSAGE, AIAgentClient
+from tm_bot.services.scheduler import (
     AI_RETRY_DELAY,
     GAME_DEALS_SENTINEL,
     GAME_DEALS_TIMEOUT,
@@ -76,7 +75,7 @@ class TestNightTrends(unittest.TestCase):
         agent = FakeAgent(API_FAIL_MESSAGE, "重試後拿到的話題！")
         rs = make_remind_system(agent)
 
-        with mock.patch("tm_bot.plugins.remind_system.time.sleep") as fake_sleep:
+        with mock.patch("tm_bot.services.scheduler.time.sleep") as fake_sleep:
             result = rs._RemindSystem__get_night_trends(MONDAY_NIGHT, "22:00")
 
         self.assertEqual(result, "重試後拿到的話題！")
@@ -87,7 +86,7 @@ class TestNightTrends(unittest.TestCase):
     def test_api_failure_after_retry_returns_none_for_silent_skip(self):
         agent = FakeAgent(API_FAIL_MESSAGE)
 
-        with mock.patch("tm_bot.plugins.remind_system.time.sleep") as fake_sleep:
+        with mock.patch("tm_bot.services.scheduler.time.sleep") as fake_sleep:
             result = make_remind_system(agent)._RemindSystem__get_night_trends(
                 MONDAY_NIGHT, "22:00"
             )
@@ -139,7 +138,7 @@ class TestGameDeals(unittest.TestCase):
     def test_api_failure_after_retry_returns_none(self):
         agent = FakeAgent(API_FAIL_MESSAGE)
 
-        with mock.patch("tm_bot.plugins.remind_system.time.sleep") as fake_sleep:
+        with mock.patch("tm_bot.services.scheduler.time.sleep") as fake_sleep:
             result = make_remind_system(agent)._RemindSystem__get_game_deals(FRIDAY_NIGHT, "22:00")
 
         self.assertIsNone(result)
@@ -227,7 +226,7 @@ class TestMorningHolidayEasterEgg(unittest.TestCase):
         rs = make_remind_system(agent, FakeSongChooser("https://youtu.be/abc123"))
 
         with mock.patch(
-            "tm_bot.plugins.remind_system.get_holiday_info", side_effect=RuntimeError("boom")
+            "tm_bot.services.scheduler.get_holiday_info", side_effect=RuntimeError("boom")
         ):
             greeting = rs._RemindSystem__get_morning_greeting(datetime(2026, 9, 25, 7, 30), "7:30")
 
@@ -238,7 +237,7 @@ class TestMorningHolidayEasterEgg(unittest.TestCase):
 class TestAskTimeoutOverride(unittest.TestCase):
     def _make_client(self):
         # 設定改由建構子注入，測試不再需要動 os.environ
-        return ai_agent_client.AIAgentClient("http://localhost:5678/webhook/test", "test-secret")
+        return AIAgentClient("http://localhost:5678/webhook/test", "test-secret")
 
     def _ask_and_capture_timeout(self, client, **kwargs):
         captured = {}
@@ -257,7 +256,7 @@ class TestAskTimeoutOverride(unittest.TestCase):
             captured["timeout"] = timeout
             return FakeResp()
 
-        with mock.patch.object(ai_agent_client.urllib.request, "urlopen", fake_urlopen):
+        with mock.patch("tm_bot.clients.ai_agent.urllib.request.urlopen", fake_urlopen):
             client.ask(question="hi", **kwargs)
         return captured["timeout"]
 

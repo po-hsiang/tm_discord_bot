@@ -6,19 +6,16 @@ from functools import partial
 
 import discord
 
+from tm_bot.clients.ai_agent import AIAgentClient
+from tm_bot.clients.yt_music import SongPicker
+from tm_bot.clients.yt_summary import VideoSummaryClient
+from tm_bot.cogs.auto_reply import AutoReplySystem
 from tm_bot.config import get_settings
-from tm_bot.plugins.ai_agent_client import AIAgentClient
-from tm_bot.plugins.auto_reply_system import AutoReplySystem
-from tm_bot.plugins.eat_what_system import EatWhatSystem
-from tm_bot.plugins.remind_system import RemindSystem
-from tm_bot.plugins.song_picker import SongPicker
-from tm_bot.plugins.video_summary import (
-    SILENT_ERROR_CODES,
-    VideoSummaryClient,
-    build_embed,
-    build_error_message,
-    extract_video_id,
-)
+from tm_bot.services.eat import EatWhatSystem
+from tm_bot.services.scheduler import RemindSystem
+from tm_bot.services.youtube import extract_video_id
+from tm_bot.ui.chunking import send_in_chunks
+from tm_bot.ui.embeds import SILENT_ERROR_CODES, build_embed, build_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -82,17 +79,6 @@ def _build_ai_context(message):
             for sticker in message.stickers
         ],
     }
-
-
-async def send_in_chunks(channel, content, chunk_size=1900, reply_to=None):
-    # Discord 單則訊息上限 2000 字，超過就分段送出；
-    # reply_to 指定時，第一段以「回覆」形式呈現（多人頻道中對話脈絡更清楚）
-    for i in range(0, len(content), chunk_size):
-        chunk = content[i : i + chunk_size]
-        if reply_to is not None and i == 0:
-            await reply_to.reply(chunk)
-        else:
-            await channel.send(chunk)
 
 
 async def _handle_command(message, user_msg, loop):

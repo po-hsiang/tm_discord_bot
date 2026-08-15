@@ -1,7 +1,7 @@
 import logging
 import random
 
-from tm_bot.google_sheet_utils import GoogleSheetUtils
+from tm_bot.clients.google_sheets import GoogleSheetUtils
 
 logger = logging.getLogger(__name__)
 

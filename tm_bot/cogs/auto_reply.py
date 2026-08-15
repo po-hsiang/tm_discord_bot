@@ -1,4 +1,4 @@
-from .pull_system import PullSystem
+from tm_bot.services.draw import PullSystem
 
 
 class AutoReplySystem:

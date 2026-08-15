@@ -1,7 +1,7 @@
 import unittest
 from datetime import date
 
-from tm_bot.plugins.holiday_lookup import KIND_FESTIVAL, KIND_MAKEUP, get_holiday_info
+from tm_bot.services.holiday import KIND_FESTIVAL, KIND_MAKEUP, get_holiday_info
 
 
 class TestNationalHolidays(unittest.TestCase):
