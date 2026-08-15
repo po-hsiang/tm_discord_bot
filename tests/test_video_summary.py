@@ -6,9 +6,7 @@ from tm_discord_bot.scripts.plugins import video_summary
 class TestExtractVideoId(unittest.TestCase):
     def test_watch_url(self):
         self.assertEqual(
-            video_summary.extract_video_id(
-                "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-            ),
+            video_summary.extract_video_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
             "dQw4w9WgXcQ",
         )
 
@@ -34,9 +32,7 @@ class TestExtractVideoId(unittest.TestCase):
 
     def test_url_inside_message_text(self):
         self.assertEqual(
-            video_summary.extract_video_id(
-                "這部超好笑 https://youtu.be/dQw4w9WgXcQ 快看"
-            ),
+            video_summary.extract_video_id("這部超好笑 https://youtu.be/dQw4w9WgXcQ 快看"),
             "dQw4w9WgXcQ",
         )
 

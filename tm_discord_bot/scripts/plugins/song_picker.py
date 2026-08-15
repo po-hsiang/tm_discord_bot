@@ -1,6 +1,6 @@
-from pathlib import Path
 import logging
 import os
+from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
@@ -45,7 +45,7 @@ class SongPicker:
 
     def search_keyword_in_song_list(self, keyword):
         if len(keyword) < 2:
-            return [f"搜尋請大於等於2個字"]
+            return ["搜尋請大於等於2個字"]
         try:
             resp = requests.get(
                 f"{self.base_url}/search", params={"q": keyword}, timeout=self.TIMEOUT

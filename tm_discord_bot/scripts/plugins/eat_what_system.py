@@ -1,7 +1,8 @@
-from google_sheet_utils import GoogleSheetUtils
-from config_utils import read_config_file
 import logging
 import random
+
+from config_utils import read_config_file
+from google_sheet_utils import GoogleSheetUtils
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class EatWhatSystem:
                     if value:
                         if index == 0:
                             meal_type = value
-                            meal_dict[meal_type] = list()
+                            meal_dict[meal_type] = []
                             meal_commend_list.append(meal_type)
                         else:
                             total_answers_list.append(value)

@@ -17,3 +17,39 @@ dependencies = [
 [tool.uv]
 # 本專案以 scripts/ 為匯入根目錄直接執行，不作為套件安裝（等同 poetry install --no-root）
 package = false
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.3",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+# 明確列出啟用的規則集，不依賴 ruff 的預設值（預設值會隨版本變動而漂移）
+select = [
+    "E",   # pycodestyle 錯誤
+    "W",   # pycodestyle 警告
+    "F",   # pyflakes：未使用的匯入／變數、未定義名稱
+    "I",   # isort：匯入排序
+    "UP",  # pyupgrade：過時語法
+    "B",   # bugbear：容易踩的陷阱（可變預設值、迴圈變數綁定等）
+    "C4",  # 可簡化的推導式與集合建構
+    "SIM", # 可簡化的寫法
+    "RUF", # ruff 專屬規則
+]
+ignore = [
+    # E501：行長交由 formatter 負責（ruff 官方建議：啟用 formatter 時不要另開 E501）。
+    # 本專案有大量中文 Prompt 字串，formatter 無法也不該切斷字串內容，
+    # 硬開 E501 只會逼出滿地的 noqa。
+    "E501",
+    # RUF001～003：把全形標點（，、：「」）視為「易混淆字元」。
+    # 本專案的註解、文案、Prompt 皆為臺灣繁體中文，此規則會產生數百則無意義警告。
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+# 刻意不啟用 BLE（blind-except）：本專案對外部服務一律以 except Exception 降級，
+# 讓單一功能故障不拖垮機器人，是設計決策而非疏漏。

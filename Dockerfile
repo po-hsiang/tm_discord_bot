@@ -30,7 +30,8 @@ WORKDIR /app
 COPY pyproject.toml uv.lock .python-version /app/
 
 # 依 lock 檔安裝相依（建立 /app/.venv，--frozen 確保與 uv.lock 完全一致）
-RUN uv sync --frozen
+# --no-dev：開發工具（ruff）不進生產映像
+RUN uv sync --frozen --no-dev
 
 # 複製應用程序的其餘部分到容器中
 COPY . /app

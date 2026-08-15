@@ -23,5 +23,12 @@ jobs:
       - name: 安裝相依套件
         run: uv sync --frozen
 
+      # 規則集定義於 pyproject.toml 的 [tool.ruff]，與本機開發環境完全一致
+      - name: 程式碼檢查（ruff lint）
+        run: uv run ruff check .
+
+      - name: 格式檢查（ruff format）
+        run: uv run ruff format --check .
+
       - name: 執行單元測試
         run: uv run python -m unittest discover -s tests -v

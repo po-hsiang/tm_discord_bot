@@ -147,9 +147,7 @@ class TestGameDeals(unittest.TestCase):
         agent = FakeAgent(API_FAIL_MESSAGE)
 
         with mock.patch("plugins.remind_system.time.sleep") as fake_sleep:
-            result = make_remind_system(agent)._RemindSystem__get_game_deals(
-                FRIDAY_NIGHT, "22:00"
-            )
+            result = make_remind_system(agent)._RemindSystem__get_game_deals(FRIDAY_NIGHT, "22:00")
 
         self.assertIsNone(result)
         self.assertEqual(len(agent.calls), 2)
@@ -235,12 +233,8 @@ class TestMorningHolidayEasterEgg(unittest.TestCase):
         agent = FakeAgent("早安呀！")
         rs = make_remind_system(agent, FakeSongChooser("https://youtu.be/abc123"))
 
-        with mock.patch(
-            "plugins.remind_system.get_holiday_info", side_effect=RuntimeError("boom")
-        ):
-            greeting = rs._RemindSystem__get_morning_greeting(
-                datetime(2026, 9, 25, 7, 30), "7:30"
-            )
+        with mock.patch("plugins.remind_system.get_holiday_info", side_effect=RuntimeError("boom")):
+            greeting = rs._RemindSystem__get_morning_greeting(datetime(2026, 9, 25, 7, 30), "7:30")
 
         self.assertIn("早安呀！", greeting)
         self.assertNotIn("節日彩蛋", agent.calls[-1]["question"])
@@ -274,9 +268,7 @@ class TestAskTimeoutOverride(unittest.TestCase):
             captured["timeout"] = timeout
             return FakeResp()
 
-        with mock.patch.object(
-            ai_agent_client.urllib.request, "urlopen", fake_urlopen
-        ):
+        with mock.patch.object(ai_agent_client.urllib.request, "urlopen", fake_urlopen):
             client.ask(question="hi", **kwargs)
         return captured["timeout"]
 

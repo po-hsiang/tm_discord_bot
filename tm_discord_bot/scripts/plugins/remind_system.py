@@ -1,11 +1,11 @@
-from config_utils import read_config_file
-from datetime import datetime
-from functools import partial
 import asyncio
 import logging
 import threading
 import time
+from datetime import datetime
+from functools import partial
 
+from config_utils import read_config_file
 from plugins.ai_agent_client import API_FAIL_MESSAGE
 from plugins.holiday_lookup import KIND_MAKEUP, get_holiday_info
 
@@ -30,7 +30,7 @@ class RemindSystem:
     def __new__(cls, *args, **kwargs):
         with cls._lock:
             if cls._instance is None:
-                cls._instance = super(RemindSystem, cls).__new__(cls)
+                cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self, client, ai_agent, yt_song_chooser, executor=None) -> None:
@@ -61,15 +61,12 @@ class RemindSystem:
         while True:
             try:
                 now = datetime.now()
-                if weekdays is None or now.weekday() in weekdays:
-                    if now.hour == target_time.hour and now.minute == target_time.minute:
-                        channel = self.client.get_channel(
-                            self.config.get("test_channel_id")
-                        )
-                        if channel is None:
-                            logger.warning("找不到提醒頻道（test_channel_id），本次提醒略過")
-                        else:
-                            await channel.send(f"{message_content}")
+                if self._is_due(now, target_time, weekdays):
+                    channel = self.client.get_channel(self.config.get("test_channel_id"))
+                    if channel is None:
+                        logger.warning("找不到提醒頻道（test_channel_id），本次提醒略過")
+                    else:
+                        await channel.send(f"{message_content}")
             except Exception:
                 # 任何例外都不能讓背景任務死亡，記錄後下一分鐘繼續
                 logger.exception("提醒任務發生錯誤（一分鐘後繼續運作）")
@@ -82,7 +79,9 @@ class RemindSystem:
             return False
         return now.hour == target_time.hour and now.minute == target_time.minute
 
-    async def _run_daily_task(self, time_str, channel_key, build_message, task_label, weekdays=None):
+    async def _run_daily_task(
+        self, time_str, channel_key, build_message, task_label, weekdays=None
+    ):
         """於指定時間執行的通用迴圈（早安、晚間話題、遊戲情報共用）。
 
         build_message(now, time_str) 為同步（阻塞）呼叫，移到 worker 執行緒
@@ -127,7 +126,9 @@ class RemindSystem:
             return ""
         kind, name = info
         if kind == KIND_MAKEUP:
-            return f"今天是「{name}」連假的補假日！請體恤大家連假出遊，聊聊塞車、去哪玩之類的話題。\n"
+            return (
+                f"今天是「{name}」連假的補假日！請體恤大家連假出遊，聊聊塞車、去哪玩之類的話題。\n"
+            )
         return f"今天是「{name}」！請把節日彩蛋自然融入招呼語（應景祝福或節日梗），節日感要明顯。\n"
 
     def __get_morning_greeting(self, now, time_str):
@@ -212,15 +213,29 @@ class RemindSystem:
         if self.already_started:
             return
         self.already_started = True
-        self._tasks.append(asyncio.ensure_future(
-            self._run_daily_task("7:30", "chitchat_channel_id", self.__get_morning_greeting, "早安")
-        ))
-        self._tasks.append(asyncio.ensure_future(
-            self._run_daily_task("19:30", "chitchat_channel_id", self.__get_night_trends, "晚間話題")
-        ))
-        self._tasks.append(asyncio.ensure_future(
-            self._run_daily_task(
-                "22:00", "game_deals_channel_id", self.__get_game_deals, "遊戲情報", weekdays=[4]
+        self._tasks.append(
+            asyncio.ensure_future(
+                self._run_daily_task(
+                    "7:30", "chitchat_channel_id", self.__get_morning_greeting, "早安"
+                )
             )
-        ))
+        )
+        self._tasks.append(
+            asyncio.ensure_future(
+                self._run_daily_task(
+                    "19:30", "chitchat_channel_id", self.__get_night_trends, "晚間話題"
+                )
+            )
+        )
+        self._tasks.append(
+            asyncio.ensure_future(
+                self._run_daily_task(
+                    "22:00",
+                    "game_deals_channel_id",
+                    self.__get_game_deals,
+                    "遊戲情報",
+                    weekdays=[4],
+                )
+            )
+        )
         # self._tasks.append(asyncio.ensure_future(self._remind_message("14:42", "測試用", [0, 1, 2, 3, 4])))

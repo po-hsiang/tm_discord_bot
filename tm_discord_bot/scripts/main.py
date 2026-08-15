@@ -1,13 +1,16 @@
+import asyncio
+import contextlib
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-import asyncio
-import logging
 
-from plugins.song_picker import SongPicker
-from plugins.eat_what_system import EatWhatSystem
-from plugins.remind_system import RemindSystem
+import discord
+from config_utils import read_config_file
 from plugins.ai_agent_client import AIAgentClient
 from plugins.auto_reply_system import AutoReplySystem
+from plugins.eat_what_system import EatWhatSystem
+from plugins.remind_system import RemindSystem
+from plugins.song_picker import SongPicker
 from plugins.video_summary import (
     SILENT_ERROR_CODES,
     VideoSummaryClient,
@@ -15,8 +18,6 @@ from plugins.video_summary import (
     build_error_message,
     extract_video_id,
 )
-from config_utils import read_config_file
-import discord
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +90,7 @@ async def send_in_chunks(channel, content, chunk_size=1900, reply_to=None):
 
 async def _handle_command(message, user_msg, loop):
     # 指令路徑：以 ! 開頭的訊息走原生功能
-    answer = await loop.run_in_executor(
-        worker, partial(auto_reply_system.get_reply, user_msg)
-    )
+    answer = await loop.run_in_executor(worker, partial(auto_reply_system.get_reply, user_msg))
     if answer:
         await send_in_chunks(message.channel, f"{message.author.mention}\n{answer}")
 
@@ -108,7 +107,7 @@ async def _handle_command(message, user_msg, loop):
 
     if user_msg.startswith("!查歌單"):
         # 用指令長度切關鍵字並去除前後空白，「!查歌單abc」（沒打空格）也不會吃字
-        keyword = user_msg[len("!查歌單"):].strip()
+        keyword = user_msg[len("!查歌單") :].strip()
         results = await loop.run_in_executor(
             worker, partial(yt_song.search_keyword_in_song_list, keyword)
         )
@@ -126,26 +125,20 @@ async def _handle_command(message, user_msg, loop):
 
 async def _handle_video_summary(message, video_id, loop):
     # 摘要可能跑數十秒，用 ⏳ reaction 代替 typing indicator 讓使用者知道有在處理
-    try:
+    with contextlib.suppress(discord.HTTPException):
         await message.add_reaction("⏳")
-    except discord.HTTPException:
-        pass
 
     future = _summary_inflight.get(video_id)
     if future is None:
-        future = loop.run_in_executor(
-            ai_worker, partial(video_summary.summarize, video_id)
-        )
+        future = loop.run_in_executor(ai_worker, partial(video_summary.summarize, video_id))
         _summary_inflight[video_id] = future
         future.add_done_callback(lambda _: _summary_inflight.pop(video_id, None))
 
     try:
         result = await future
     finally:
-        try:
+        with contextlib.suppress(discord.HTTPException):
             await message.remove_reaction("⏳", client.user)
-        except discord.HTTPException:
-            pass
 
     if result.get("ok"):
         await message.reply(embed=build_embed(result))

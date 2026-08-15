@@ -1,4 +1,3 @@
-from pathlib import Path
 import json
 import logging
 import os
@@ -6,6 +5,7 @@ import re
 import threading
 import time
 import urllib.request
+from pathlib import Path
 
 import discord
 from dotenv import load_dotenv

@@ -1,8 +1,8 @@
-from pathlib import Path
 import json
 import logging
 import os
 import urllib.request
+from pathlib import Path
 
 from dotenv import load_dotenv
 
