@@ -39,5 +39,6 @@ COPY . /app
 # 讓容器直接使用 venv 內的 Python
 ENV PATH="/app/.venv/bin:$PATH"
 
-# 當容器啟動時運行 Python 應用程序
-CMD ["python", "./tm_discord_bot/scripts/main.py"]
+# 以套件模組方式啟動（WORKDIR=/app 使 tm_bot 可被匯入），
+# 不用 `python 檔案路徑`：那會把 tm_bot/ 而非 /app 放進 sys.path，絕對匯入會失效
+CMD ["python", "-m", "tm_bot.main"]

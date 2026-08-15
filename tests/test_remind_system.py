@@ -1,17 +1,10 @@
-import sys
 import unittest
 from datetime import datetime
-from pathlib import Path
 from unittest import mock
 
-# remind_system 內部以 scripts/ 為根匯入（config_utils、plugins.*），需先加入 sys.path
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "tm_discord_bot" / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-from plugins import ai_agent_client  # noqa: E402
-from plugins.ai_agent_client import API_FAIL_MESSAGE  # noqa: E402
-from plugins.remind_system import (  # noqa: E402
+from tm_bot.plugins import ai_agent_client
+from tm_bot.plugins.ai_agent_client import API_FAIL_MESSAGE
+from tm_bot.plugins.remind_system import (
     AI_RETRY_DELAY,
     GAME_DEALS_SENTINEL,
     GAME_DEALS_TIMEOUT,
@@ -83,7 +76,7 @@ class TestNightTrends(unittest.TestCase):
         agent = FakeAgent(API_FAIL_MESSAGE, "重試後拿到的話題！")
         rs = make_remind_system(agent)
 
-        with mock.patch("plugins.remind_system.time.sleep") as fake_sleep:
+        with mock.patch("tm_bot.plugins.remind_system.time.sleep") as fake_sleep:
             result = rs._RemindSystem__get_night_trends(MONDAY_NIGHT, "22:00")
 
         self.assertEqual(result, "重試後拿到的話題！")
@@ -94,7 +87,7 @@ class TestNightTrends(unittest.TestCase):
     def test_api_failure_after_retry_returns_none_for_silent_skip(self):
         agent = FakeAgent(API_FAIL_MESSAGE)
 
-        with mock.patch("plugins.remind_system.time.sleep") as fake_sleep:
+        with mock.patch("tm_bot.plugins.remind_system.time.sleep") as fake_sleep:
             result = make_remind_system(agent)._RemindSystem__get_night_trends(
                 MONDAY_NIGHT, "22:00"
             )
@@ -146,7 +139,7 @@ class TestGameDeals(unittest.TestCase):
     def test_api_failure_after_retry_returns_none(self):
         agent = FakeAgent(API_FAIL_MESSAGE)
 
-        with mock.patch("plugins.remind_system.time.sleep") as fake_sleep:
+        with mock.patch("tm_bot.plugins.remind_system.time.sleep") as fake_sleep:
             result = make_remind_system(agent)._RemindSystem__get_game_deals(FRIDAY_NIGHT, "22:00")
 
         self.assertIsNone(result)
@@ -233,7 +226,9 @@ class TestMorningHolidayEasterEgg(unittest.TestCase):
         agent = FakeAgent("早安呀！")
         rs = make_remind_system(agent, FakeSongChooser("https://youtu.be/abc123"))
 
-        with mock.patch("plugins.remind_system.get_holiday_info", side_effect=RuntimeError("boom")):
+        with mock.patch(
+            "tm_bot.plugins.remind_system.get_holiday_info", side_effect=RuntimeError("boom")
+        ):
             greeting = rs._RemindSystem__get_morning_greeting(datetime(2026, 9, 25, 7, 30), "7:30")
 
         self.assertIn("早安呀！", greeting)

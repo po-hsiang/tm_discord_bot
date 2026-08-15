@@ -1,18 +1,7 @@
-import sys
 import unittest
 from datetime import date
-from pathlib import Path
 
-# holiday_lookup 位於 scripts/plugins/，需先加入 sys.path
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "tm_discord_bot" / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-from plugins.holiday_lookup import (  # noqa: E402
-    KIND_FESTIVAL,
-    KIND_MAKEUP,
-    get_holiday_info,
-)
+from tm_bot.plugins.holiday_lookup import KIND_FESTIVAL, KIND_MAKEUP, get_holiday_info
 
 
 class TestNationalHolidays(unittest.TestCase):

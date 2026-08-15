@@ -16,7 +16,7 @@ services:
       - "host.docker.internal:host-gateway"
     # GCP 服務帳戶憑證以唯讀掛載；映像本身不再包含任何機敏檔案
     volumes:
-      - ./tm_discord_bot/json:/app/tm_discord_bot/json:ro
+      - ./secrets:/app/secrets:ro
     # 加入 ai-net 共用網路，以服務名直連 yt-music-mcp 歌單微服務
     networks:
       - default

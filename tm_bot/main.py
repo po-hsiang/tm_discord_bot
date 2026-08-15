@@ -5,13 +5,14 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
 import discord
-from config_utils import read_config_file
-from plugins.ai_agent_client import AIAgentClient
-from plugins.auto_reply_system import AutoReplySystem
-from plugins.eat_what_system import EatWhatSystem
-from plugins.remind_system import RemindSystem
-from plugins.song_picker import SongPicker
-from plugins.video_summary import (
+
+from tm_bot.config_utils import read_config_file
+from tm_bot.plugins.ai_agent_client import AIAgentClient
+from tm_bot.plugins.auto_reply_system import AutoReplySystem
+from tm_bot.plugins.eat_what_system import EatWhatSystem
+from tm_bot.plugins.remind_system import RemindSystem
+from tm_bot.plugins.song_picker import SongPicker
+from tm_bot.plugins.video_summary import (
     SILENT_ERROR_CODES,
     VideoSummaryClient,
     build_embed,

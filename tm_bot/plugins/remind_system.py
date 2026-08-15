@@ -5,9 +5,9 @@ import time
 from datetime import datetime
 from functools import partial
 
-from config_utils import read_config_file
-from plugins.ai_agent_client import API_FAIL_MESSAGE
-from plugins.holiday_lookup import KIND_MAKEUP, get_holiday_info
+from tm_bot.config_utils import read_config_file
+from tm_bot.plugins.ai_agent_client import API_FAIL_MESSAGE
+from tm_bot.plugins.holiday_lookup import KIND_MAKEUP, get_holiday_info
 
 logger = logging.getLogger(__name__)
 

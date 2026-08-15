@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 # 本機直跑時從專案根載入 .env；Docker 部署由 compose.yaml 的 env_file 注入
 # （容器內沒有 .env 檔案，load_dotenv 對不存在的路徑是 no-op）
-load_dotenv(Path(__file__).resolve().parents[3] / ".env")
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 API_FAIL_MESSAGE = "小粉絲的 AI 大腦暫時連不上線，請稍後再試 🙏"
 EMPTY_QUESTION_MESSAGE = "想問什麼呢？請在指令後面接上問題，例如：「!問 今天晚餐吃什麼好？」"

@@ -15,7 +15,8 @@ dependencies = [
 ]
 
 [tool.uv]
-# 本專案以 scripts/ 為匯入根目錄直接執行，不作為套件安裝（等同 poetry install --no-root）
+# 應用程式而非函式庫：tm_bot 套件位於專案根，以 `python -m tm_bot.main` 執行，
+# 不需安裝成套件（等同 poetry install --no-root）
 package = false
 
 [dependency-groups]
@@ -53,3 +54,7 @@ ignore = [
 ]
 # 刻意不啟用 BLE（blind-except）：本專案對外部服務一律以 except Exception 降級，
 # 讓單一功能故障不拖垮機器人，是設計決策而非疏漏。
+
+[tool.ruff.lint.isort]
+# 明確宣告自家套件，匯入分組不依賴目錄結構的自動推測
+known-first-party = ["tm_bot"]

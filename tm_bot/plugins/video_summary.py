@@ -11,7 +11,7 @@ import discord
 from dotenv import load_dotenv
 
 # 本機直跑時從專案根載入 .env；Docker 部署由 compose.yaml 的 env_file 注入
-load_dotenv(Path(__file__).resolve().parents[3] / ".env")
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 logger = logging.getLogger(__name__)
 

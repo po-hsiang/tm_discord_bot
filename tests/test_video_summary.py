@@ -1,6 +1,6 @@
 import unittest
 
-from tm_discord_bot.scripts.plugins import video_summary
+from tm_bot.plugins import video_summary
 
 
 class TestExtractVideoId(unittest.TestCase):

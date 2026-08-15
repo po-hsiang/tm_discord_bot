@@ -1,8 +1,8 @@
 import logging
 import random
 
-from config_utils import read_config_file
-from google_sheet_utils import GoogleSheetUtils
+from tm_bot.config_utils import read_config_file
+from tm_bot.google_sheet_utils import GoogleSheetUtils
 
 logger = logging.getLogger(__name__)
 

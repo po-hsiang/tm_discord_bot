@@ -2,6 +2,7 @@
 .venv
 .vscode
 *.json
+secrets/
 *.pyc
 .env
 reports/
