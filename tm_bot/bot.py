@@ -18,7 +18,8 @@ from tm_bot.clients.yt_music import SongPicker
 from tm_bot.clients.yt_summary import VideoSummaryClient
 from tm_bot.config import get_settings
 from tm_bot.services.eat import EatWhatSystem
-from tm_bot.services.scheduler import RemindSystem
+from tm_bot.services.scheduler.jobs import build_jobs
+from tm_bot.services.scheduler.runner import Scheduler
 from tm_bot.services.youtube import extract_video_id
 
 logger = logging.getLogger(__name__)
@@ -94,9 +95,8 @@ class TmBot(commands.Bot):
             settings.n8n_yt_summary_timeout,
         )
         self.what_to_eat = EatWhatSystem(settings.what_to_eat_url, settings.google_credential_path)
-        self.remind_system = RemindSystem(
-            self, self.ai_agent, self.yt_song, settings, executor=self.ai_worker
-        )
+        self.scheduler = Scheduler(self, settings, executor=self.ai_worker)
+        self.scheduler.add(*build_jobs(self.ai_agent, self.yt_song))
 
     # --- 阻塞呼叫的統一入口（避免每個 Cog 各自寫 run_in_executor + partial）---
 
@@ -124,7 +124,7 @@ class TmBot(commands.Bot):
         # 保留 task 參考，避免執行中的預載被垃圾回收掉
         self._preload_task = asyncio.create_task(self.run_blocking(self.what_to_eat.ensure_loaded))
 
-        self.remind_system.start()
+        self.scheduler.start()
 
     async def on_ready(self):
         logger.info("機器人「%s」已上線。", self.user)

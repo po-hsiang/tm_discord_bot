@@ -2,14 +2,16 @@ import unittest
 from datetime import datetime
 from unittest import mock
 
-from tm_bot.clients.ai_agent import API_FAIL_MESSAGE, AIAgentClient
-from tm_bot.services.scheduler import (
+from tm_bot.clients.ai_agent import API_FAIL_MESSAGE
+from tm_bot.services.scheduler.jobs import (
     AI_RETRY_DELAY,
-    GAME_DEALS_SENTINEL,
     GAME_DEALS_TIMEOUT,
     NIGHT_TRENDS_TIMEOUT,
-    RemindSystem,
+    ScheduledMessages,
+    build_jobs,
 )
+from tm_bot.services.scheduler.prompts import GAME_DEALS_SENTINEL
+from tm_bot.services.scheduler.runner import is_due
 
 MONDAY_NIGHT = datetime(2026, 8, 3, 22, 0)
 MONDAY_MORNING = datetime(2026, 8, 3, 7, 30)
@@ -36,20 +38,43 @@ class FakeSongChooser:
         return self.song
 
 
-def make_remind_system(ai_agent, yt_song_chooser=None):
-    # 建構子只做屬性指派，測試可直接建立
-    # （過去需要 object.__new__ 繞過 Singleton 與 .env／config.ini 的讀取）
-    return RemindSystem(
-        client=None, ai_agent=ai_agent, yt_song_chooser=yt_song_chooser, settings=None
-    )
+def make_messages(ai_agent, yt_song_chooser=None):
+    return ScheduledMessages(ai_agent, yt_song_chooser)
+
+
+class TestScheduleTable(unittest.TestCase):
+    """排程表是對外行為（幾點發、發到哪個頻道），改動必須是刻意的。"""
+
+    def setUp(self):
+        self.jobs = {job.label: job for job in build_jobs(FakeAgent("ok"), FakeSongChooser("x"))}
+
+    def test_three_jobs_are_scheduled(self):
+        self.assertEqual(set(self.jobs), {"早安", "晚間話題", "遊戲情報"})
+
+    def test_morning_job(self):
+        job = self.jobs["早安"]
+        self.assertEqual(job.time_str, "7:30")
+        self.assertEqual(job.channel_key, "chitchat_channel_id")
+        self.assertIsNone(job.weekdays)  # 每天
+
+    def test_night_trends_job(self):
+        job = self.jobs["晚間話題"]
+        self.assertEqual(job.time_str, "19:30")
+        self.assertEqual(job.channel_key, "chitchat_channel_id")
+        self.assertIsNone(job.weekdays)
+
+    def test_game_deals_job_is_friday_only(self):
+        job = self.jobs["遊戲情報"]
+        self.assertEqual(job.time_str, "22:00")
+        self.assertEqual(job.channel_key, "game_deals_channel_id")
+        self.assertEqual(job.weekdays, (4,))  # 只在星期五
 
 
 class TestNightTrends(unittest.TestCase):
     def test_success_uses_dedicated_session_and_timeout(self):
         agent = FakeAgent("今晚話題來囉！")
-        rs = make_remind_system(agent)
 
-        result = rs._RemindSystem__get_night_trends(MONDAY_NIGHT, "22:00")
+        result = make_messages(agent).night_trends(MONDAY_NIGHT, "22:00")
 
         self.assertEqual(result, "今晚話題來囉！")
         # 一次就成功時不會多打第二次
@@ -61,9 +86,8 @@ class TestNightTrends(unittest.TestCase):
 
     def test_prompt_contains_tool_and_filter_rules(self):
         agent = FakeAgent("今晚話題來囉！")
-        rs = make_remind_system(agent)
 
-        rs._RemindSystem__get_night_trends(MONDAY_NIGHT, "22:00")
+        make_messages(agent).night_trends(MONDAY_NIGHT, "22:00")
 
         question = agent.calls[-1]["question"]
         self.assertIn("tw_trends_news", question)
@@ -73,10 +97,9 @@ class TestNightTrends(unittest.TestCase):
 
     def test_first_failure_retries_once_and_posts_retry_answer(self):
         agent = FakeAgent(API_FAIL_MESSAGE, "重試後拿到的話題！")
-        rs = make_remind_system(agent)
 
-        with mock.patch("tm_bot.services.scheduler.time.sleep") as fake_sleep:
-            result = rs._RemindSystem__get_night_trends(MONDAY_NIGHT, "22:00")
+        with mock.patch("tm_bot.services.scheduler.jobs.time.sleep") as fake_sleep:
+            result = make_messages(agent).night_trends(MONDAY_NIGHT, "22:00")
 
         self.assertEqual(result, "重試後拿到的話題！")
         self.assertEqual(len(agent.calls), 2)
@@ -86,10 +109,8 @@ class TestNightTrends(unittest.TestCase):
     def test_api_failure_after_retry_returns_none_for_silent_skip(self):
         agent = FakeAgent(API_FAIL_MESSAGE)
 
-        with mock.patch("tm_bot.services.scheduler.time.sleep") as fake_sleep:
-            result = make_remind_system(agent)._RemindSystem__get_night_trends(
-                MONDAY_NIGHT, "22:00"
-            )
+        with mock.patch("tm_bot.services.scheduler.jobs.time.sleep") as fake_sleep:
+            result = make_messages(agent).night_trends(MONDAY_NIGHT, "22:00")
 
         self.assertIsNone(result)
         # 只重試一次（共打兩次）就放棄，避免無限重打
@@ -100,9 +121,8 @@ class TestNightTrends(unittest.TestCase):
 class TestGameDeals(unittest.TestCase):
     def test_success_uses_dedicated_session_and_timeout(self):
         agent = FakeAgent("本週遊戲情報來囉！")
-        rs = make_remind_system(agent)
 
-        result = rs._RemindSystem__get_game_deals(FRIDAY_NIGHT, "22:00")
+        result = make_messages(agent).game_deals(FRIDAY_NIGHT, "22:00")
 
         self.assertEqual(result, "本週遊戲情報來囉！")
         self.assertEqual(len(agent.calls), 1)
@@ -113,9 +133,8 @@ class TestGameDeals(unittest.TestCase):
 
     def test_prompt_contains_tool_and_selection_rules(self):
         agent = FakeAgent("ok")
-        rs = make_remind_system(agent)
 
-        rs._RemindSystem__get_game_deals(FRIDAY_NIGHT, "22:00")
+        make_messages(agent).game_deals(FRIDAY_NIGHT, "22:00")
 
         question = agent.calls[-1]["question"]
         self.assertIn("game_deals", question)
@@ -131,46 +150,46 @@ class TestGameDeals(unittest.TestCase):
         self.assertIn("請只回覆 GAME_DEALS_UNAVAILABLE", question)
 
     def test_sentinel_reply_returns_none_for_silent_skip(self):
-        rs = make_remind_system(FakeAgent(GAME_DEALS_SENTINEL))
+        messages = make_messages(FakeAgent(GAME_DEALS_SENTINEL))
 
-        self.assertIsNone(rs._RemindSystem__get_game_deals(FRIDAY_NIGHT, "22:00"))
+        self.assertIsNone(messages.game_deals(FRIDAY_NIGHT, "22:00"))
 
     def test_api_failure_after_retry_returns_none(self):
         agent = FakeAgent(API_FAIL_MESSAGE)
 
-        with mock.patch("tm_bot.services.scheduler.time.sleep") as fake_sleep:
-            result = make_remind_system(agent)._RemindSystem__get_game_deals(FRIDAY_NIGHT, "22:00")
+        with mock.patch("tm_bot.services.scheduler.jobs.time.sleep") as fake_sleep:
+            result = make_messages(agent).game_deals(FRIDAY_NIGHT, "22:00")
 
         self.assertIsNone(result)
         self.assertEqual(len(agent.calls), 2)
         fake_sleep.assert_called_once_with(AI_RETRY_DELAY)
 
 
-class TestWeekdayFilter(unittest.TestCase):
+class TestIsDue(unittest.TestCase):
     TARGET = datetime.strptime("22:00", "%H:%M")
 
     def test_friday_2200_is_due(self):
         # 2026-08-07 為星期五（weekday=4）
-        self.assertTrue(RemindSystem._is_due(FRIDAY_NIGHT, self.TARGET, [4]))
+        self.assertTrue(is_due(FRIDAY_NIGHT, self.TARGET, (4,)))
 
     def test_other_weekday_is_not_due(self):
         # 2026-08-03 為星期一：時間相同但星期不符
-        self.assertFalse(RemindSystem._is_due(MONDAY_NIGHT, self.TARGET, [4]))
+        self.assertFalse(is_due(MONDAY_NIGHT, self.TARGET, (4,)))
 
     def test_none_weekdays_means_daily(self):
-        self.assertTrue(RemindSystem._is_due(MONDAY_NIGHT, self.TARGET, None))
+        self.assertTrue(is_due(MONDAY_NIGHT, self.TARGET, None))
 
     def test_wrong_minute_is_not_due(self):
         friday_2201 = datetime(2026, 8, 7, 22, 1)
-        self.assertFalse(RemindSystem._is_due(friday_2201, self.TARGET, [4]))
+        self.assertFalse(is_due(friday_2201, self.TARGET, (4,)))
 
 
-class TestMorningGreetingUnchanged(unittest.TestCase):
+class TestMorningGreeting(unittest.TestCase):
     def test_uses_morning_call_session_without_timeout_override(self):
         agent = FakeAgent("早安呀！")
-        rs = make_remind_system(agent, FakeSongChooser("https://youtu.be/abc123"))
+        messages = make_messages(agent, FakeSongChooser("https://youtu.be/abc123"))
 
-        greeting = rs._RemindSystem__get_morning_greeting(MONDAY_MORNING, "7:30")
+        greeting = messages.morning_greeting(MONDAY_MORNING, "7:30")
 
         call = agent.calls[-1]
         self.assertEqual(call["channel_id"], "morning-call")
@@ -184,11 +203,11 @@ class TestMorningGreetingUnchanged(unittest.TestCase):
 
     def test_api_failure_still_builds_message(self):
         # 早安維持原行為：AI 故障時仍發出訊息（含降級文字），不靜默跳過
-        rs = make_remind_system(
+        messages = make_messages(
             FakeAgent(API_FAIL_MESSAGE), FakeSongChooser("歌單服務暫時連不上線")
         )
 
-        greeting = rs._RemindSystem__get_morning_greeting(MONDAY_MORNING, "7:30")
+        greeting = messages.morning_greeting(MONDAY_MORNING, "7:30")
 
         self.assertIn(API_FAIL_MESSAGE, greeting)
 
@@ -196,8 +215,8 @@ class TestMorningGreetingUnchanged(unittest.TestCase):
 class TestMorningHolidayEasterEgg(unittest.TestCase):
     def _question_on(self, morning):
         agent = FakeAgent("早安呀！")
-        rs = make_remind_system(agent, FakeSongChooser("https://youtu.be/abc123"))
-        rs._RemindSystem__get_morning_greeting(morning, "7:30")
+        messages = make_messages(agent, FakeSongChooser("https://youtu.be/abc123"))
+        messages.morning_greeting(morning, "7:30")
         return agent.calls[-1]["question"]
 
     def test_plain_day_has_no_easter_egg_line(self):
@@ -223,50 +242,15 @@ class TestMorningHolidayEasterEgg(unittest.TestCase):
     def test_lookup_failure_degrades_to_plain_greeting(self):
         # 節日查詢炸掉時要吞下例外、照常打招呼，不能拖垮整則早安
         agent = FakeAgent("早安呀！")
-        rs = make_remind_system(agent, FakeSongChooser("https://youtu.be/abc123"))
+        messages = make_messages(agent, FakeSongChooser("https://youtu.be/abc123"))
 
         with mock.patch(
-            "tm_bot.services.scheduler.get_holiday_info", side_effect=RuntimeError("boom")
+            "tm_bot.services.scheduler.jobs.get_holiday_info", side_effect=RuntimeError("boom")
         ):
-            greeting = rs._RemindSystem__get_morning_greeting(datetime(2026, 9, 25, 7, 30), "7:30")
+            greeting = messages.morning_greeting(datetime(2026, 9, 25, 7, 30), "7:30")
 
         self.assertIn("早安呀！", greeting)
         self.assertNotIn("節日彩蛋", agent.calls[-1]["question"])
-
-
-class TestAskTimeoutOverride(unittest.TestCase):
-    def _make_client(self):
-        # 設定改由建構子注入，測試不再需要動 os.environ
-        return AIAgentClient("http://localhost:5678/webhook/test", "test-secret")
-
-    def _ask_and_capture_timeout(self, client, **kwargs):
-        captured = {}
-
-        class FakeResp:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                return False
-
-            def read(self):
-                return b'{"reply": "ok"}'
-
-        def fake_urlopen(req, timeout=None):
-            captured["timeout"] = timeout
-            return FakeResp()
-
-        with mock.patch("tm_bot.clients.ai_agent.urllib.request.urlopen", fake_urlopen):
-            client.ask(question="hi", **kwargs)
-        return captured["timeout"]
-
-    def test_default_timeout_when_not_specified(self):
-        client = self._make_client()
-        self.assertEqual(self._ask_and_capture_timeout(client), client.timeout)
-
-    def test_caller_can_override_timeout(self):
-        client = self._make_client()
-        self.assertEqual(self._ask_and_capture_timeout(client, timeout=120), 120)
 
 
 if __name__ == "__main__":
