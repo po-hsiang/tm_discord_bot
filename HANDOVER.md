@@ -2,7 +2,7 @@
 
 > **給主人的使用說明**：新開 session 時，請助理「先完整閱讀專案根目錄的 HANDOVER.md 再開始工作」即可。
 > **給接手助理的說明**：正文（一～六節）為**當前現況**，第七節為**歷史紀錄**（凍結不改，新變更往後追加編號）。
-> 正文最後更新：2026-08-14。功能與檔案結構的細節以 `README.md` 為準，本文件記錄 README 沒有的：協作共識、跨服務架構、環境雷點、待辦。
+> 正文最後更新：2026-08-15。功能與檔案結構的細節以 `README.md` 為準，本文件記錄 README 沒有的：協作共識、跨服務架構、環境雷點、待辦。
 
 ---
 
@@ -11,7 +11,7 @@
 - **「虎喵小粉絲」**：為遊戲實況主「老虎喵喵喵（虎喵）」粉絲社群（好虎粉）打造的 Discord 互動機器人。
 - 功能：混合模式 AI 對話（`!` 指令優先，其餘訊息含圖片/貼圖直達 AI）、YouTube 影片快速摘要（專屬頻道貼連結即觸發）、`!抽`/`!吃`/`!聽`/`!查歌單`/`!心結`、每日 07:30 早安（含全台天氣播報與節日/補假彩蛋）、每晚 19:30 台灣熱門話題、每週五 22:00 遊戲特惠情報。
 - 技術棧：Python 3.14（**uv** 管理版本/venv/套件）＋ discord.py 2.7 ＋ pygsheets；**部署主機就是這台 Windows 機器**（Docker Desktop，容器 `tm_discord_bot`，TZ=Asia/Taipei，restart: always）。
-- **bot 端零金鑰設計**：LLM 金鑰只在 n8n、YouTube API Key 只在 yt-music-mcp。機敏設定集中 `.env`（不入版控、env_file 啟動注入），非機敏設定在 `tm_discord_bot/config/config.ini`（入版控）。
+- **bot 端零金鑰設計**：LLM 金鑰只在 n8n、YouTube API Key 只在 yt-music-mcp。機敏設定集中 `.env`（不入版控、env_file 啟動注入），非機敏設定在 `config/config.ini`（入版控）。
 - Git：remote `https://github.com/po-hsiang/tm_discord_bot`（主人**個人**帳號，私有）；commit 身分經 `~/.gitconfig` 的 `includeIf "gitdir/i:D:/GitPrivate/"` **自動**使用個人身分（po-hsiang / 個人 gmail），不需手動切換。
 
 ## 二、與主人的協作共識（務必遵守）
@@ -29,8 +29,10 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 
 | 想改什麼 | 去哪裡改 |
 | --- | --- |
-| AI 人設、模型、工具、對話記憶 | n8n「TM AI Agent」工作流（id `vlZLOnZI69bLfqXk`，編輯 `http://localhost:5678/workflow/vlZLOnZI69bLfqXk`；原名「Discord AI Agent」，2026-08-10 更名並改為多客戶端共用）；bot 端只是 HTTP 客戶端 `ai_agent_client.py` |
-| 早安/晚間話題的內容風格（Prompt） | bot 端 `plugins/remind_system.py`（改完需重建部署） |
+| AI 人設、模型、工具、對話記憶 | n8n「TM AI Agent」工作流（id `vlZLOnZI69bLfqXk`，編輯 `http://localhost:5678/workflow/vlZLOnZI69bLfqXk`；原名「Discord AI Agent」，2026-08-10 更名並改為多客戶端共用）；bot 端只是 HTTP 客戶端 `tm_bot/clients/ai_agent.py` |
+| 早安/晚間話題/遊戲情報的**文案** | `tm_bot/services/scheduler/prompts.py`（改完需重建部署） |
+| 排程的**時間、頻道、星期** | `tm_bot/services/scheduler/jobs.py` 的 `build_jobs()`（一則推播一個 `ScheduledJob`） |
+| 新增一個 `!` 指令 | 於 `tm_bot/cogs/` 新增檔案，並加進 `bot.py` 的 `EXTENSIONS`（不需改既有檔案） |
 | 影片摘要的模型與提詞 | n8n「YouTube 影片快速摘要」工作流（id `t2OrIkAIr29Qws3S`；**存檔即生效**，不用動 bot） |
 | 歌單載入/快取/搜尋、影片資訊/字幕/音訊端點 | `yt-music-mcp` 微服務（**另一專案的 Agent 維護**，這邊只提需求） |
 | 台灣熱搜／天氣／遊戲特惠來源（`tw_trends_news`／`tw_weather`／`game_deals` 工具） | n8n 端工具（主人與其 n8n Agent 另行維護） |
@@ -49,7 +51,8 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 5. **n8n 公開 API 的 `PUT /workflows`** 會拒絕含未知鍵的 `settings`（400），更新工作流時要過濾到允許的鍵。
 6. **編輯檔案前先 Read**：主人可能自己動過檔案（曾因此把頻道 ID 貼成兩倍長）。
 7. **`yt-playlist-sorter` 容器是主人的排程服務，勿動。**
-8. 模組以 `scripts/` 為根匯入（`from plugins.xxx import ...`）；repo 的 `tests/` 內已示範 `sys.path` 處理方式。
+8. **匯入一律用絕對路徑 `from tm_bot.xxx import ...`**，並以 `python -m tm_bot` 於**專案根**啟動（2026-08-15 重構後；直接跑檔案路徑會讓絕對匯入失效）。測試不再需要 `sys.path` 手腳。
+9. **設定只在 `tm_bot/config.py` 讀**：其他模組不要自己 `os.getenv`／`load_dotenv`，需要什麼值由建構子傳進去（過去散在四個模組、且以 `parents[N]` 硬數目錄層數，檔案一搬家就靜默失效）。
 
 ## 五、待辦與觀察項（2026-08-06 現況）
 
@@ -59,14 +62,15 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 
 **待辦（依價值排序）**
 - **n8n 端 `tw_trends_news` 擴充**：熱搜 3→5、頭條 3→5（已擬好交辦 prompt，見第七節補記 17；bot 端不依賴條數，n8n 可獨立上線）。
-- **`!重載` 指令**：「吃什麼」清單目前要重啟才會重載。
+- **`!重載` 指令**：「吃什麼」清單目前要重啟才會重載。改用 Cogs 後成本已大幅降低——Cog 熱重載直接用 `bot.reload_extension()`，清單重載只需把 `EatWhatSystem._loaded` 歸位。
 - **ai_worker 壅塞觀察**：聊天 AI、影片摘要（最長 200 秒）、晚間話題共用 4 執行緒，極端情況會互相排隊。
 
 ## 六、測試與部署
 
 - **單元測試**：repo 根目錄 `uv run python -m unittest discover -s tests`（不依賴 .env 與外部服務）。
+- **Lint／格式**：`uv run ruff check . --fix` 與 `uv run ruff format .`；規則釘在 `pyproject.toml`（**不依賴 ruff 預設值**），CI 會跑 `ruff check` 與 `ruff format --check`，格式沒過會擋。
 - **部署**：`docker compose up -d --build`；驗證 `docker logs tm_discord_bot --since 2m` 看到「機器人「…」已上線」。
-- **日誌**：全專案使用 `logging`（`main.py` 以 `client.run(..., root_logger=True)` 統一格式），docker logs 內所有訊息含時間戳；背景任務例外會帶 traceback（`logger.exception`）；排程發送成功會記 INFO（可直接稽核 07:30／19:30 是否正常）。容器日誌有輪替上限（compose 的 logging 設定，10MB × 5 檔）。
+- **日誌**：全專案使用 `logging`（`__main__.py` 以 `bot.run(..., root_logger=True)` 統一格式），docker logs 內所有訊息含時間戳；背景任務例外會帶 traceback（`logger.exception`）；排程發送成功會記 INFO（可直接稽核 07:30／19:30 是否正常）。容器日誌有輪替上限（compose 的 logging 設定，10MB × 5 檔）。
 - **版號慣例**：每次功能 commit 同步遞增 `pyproject.toml` 與 README 頂部徽章的版本號。
 - **commit 訊息**（2026-08-11 起）：**Conventional Commits v1.0.0** 風格——`type(scope): 描述`，type 用英文小寫（feat/fix/docs/refactor/test/chore/ci/perf），描述用臺灣繁體中文、簡短有力；**非必要不寫 body**；破壞性變更加 `!`。身分自動為個人。
 
@@ -127,6 +131,19 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 26. **（2026-08-14）早安節日彩蛋**：早安排程判斷「今天是什麼日子」，是節日或補假就在 Prompt 加一行彩蛋指示。新模組 `plugins/holiday_lookup.py` 三層合併、**全離線**（新相依 `holidays` 套件本地演算，零網路、零金鑰）：①內建暱稱表（元旦、父親節 8/8、聖誕節——蓋過官方式名稱「開國紀念日」「行憲紀念日」）②臺灣國定假日含**補假**（套件會標明補哪個節日；套件把小年夜也標成「農曆除夕」，以連兩天同名規則改回小年夜）③美系人氣節日白名單（西洋情人節/母親節/萬聖節/平安夜/跨年夜；聖派翠克、美國父親節等臺灣無感項目一律忽略）。兩種觸發：節日→應景彩蛋融入招呼語；補假→體恤連假出遊聊塞車；撞期時節日優先（如 2027-12-24 行憲補假遇平安夜）。查詢包防禦 try/except，失敗照常打招呼不拖垮早安。**補班日彩蛋暫不實作**（對頻決議）：實測官方行事曆 2026、2027 **零補班日**（政府已取消彈性放假＋補班），且補班資料是唯一需要連網的項目（TaiwanCalendar JSON），不值得為未來兩年不會發生的情境揹網路依賴——哪年恢復補班再加。套件之 2026/2027 假日已與官方行事曆鏡像逐日比對一致，日後政府公告異動靠升級套件跟進（vacanza 社群月更節奏）。測試 47/47（新增 `tests/test_holiday_lookup.py` 12 個＋早安彩蛋整合 4 個）。
 
 27. **（2026-08-14）彩蛋擴充：農曆節日＋節氣**（主人指出下一個彩蛋日其實是七夕後對頻定案）：`holiday_lookup.py` 疊兩層——④**農曆人氣節日**（元宵 1/15、七夕 7/7、中元 7/15、重陽 9/9；新相依 `cnlunar` 做國曆→農曆離線反查，**閏月不算**——2006 年閏七月初七沒有防呆會被誤判成七夕，此真實案例已入測試）⑤**節氣白名單**（只收有食俗梗的**立冬、冬至**，其餘 22 個不觸發避免彩蛋通膨；這兩詞簡繁同形可直接比對，日後要加驚蟄/穀雨等注意 cnlunar 回傳**簡體**需另做對照）。優先權定案：具名節日（1～4 層）＞補假＞節氣。準確度交叉驗證：lunardate 與 cnlunar 兩獨立套件互證、農曆 8/15 換算 2026-09-25 與官方中秋吻合。近期首播：**2026-08-19（三）七夕情人節**。冷知識：2027 七夕＝8/8 與父親節同日，依優先權將以內建表的父親節觸發。測試 57/57。
+
+28. **（2026-08-15）架構重整（Phase A）**（主人指示：導入專業的軟體工程架構與 Clean Code，`main.py` 不該那麼多行、目錄不該雜亂）。八個 commit，**對使用者可見的行為刻意維持一致**（指令名、文案、排程時間、Prompt 內容、Embed 版型全部原樣）：
+    - **ruff**（lint＋format）導入並納入 CI，規則**明確釘在 `pyproject.toml`**不吃預設值。關掉 `RUF001~003`（把全形標點視為「易混淆字元」，中文專案會炸出 492 則無意義警告）與 `E501`（行長交給 formatter，中文 Prompt 字串切不得，硬開只會逼出滿地 noqa）。Dockerfile 改 `uv sync --frozen --no-dev`，開發工具不進生產映像。
+    - **目錄**：`tm_discord_bot/scripts/` → 專案根的 `tm_bot/` 套件；`config/` 與 `secrets/`（原 `tm_discord_bot/json/`）移到根層。連帶改 Dockerfile `CMD`、compose volume、`.dockerignore`——**已確認 `/app/secrets` 不存在於映像內**（憑證只經 volume 進來，安全性質不變）。
+    - **設定**：`config_utils.read_config_file()`（無型別 dict）→ `config.py` 的 `Settings` frozen dataclass ＋ `get_settings()`（lru_cache、惰性）。消滅散在四個模組的 `load_dotenv`（原本用 `parents[N]` 硬數層數）與三處 import 期副作用；缺漏的環境變數改成**一次列完**。各客戶端改建構子注入，測試不必再動 `os.environ`。
+    - **分層**：`plugins/` 雜物間拆成 `clients/`（外部 I/O）、`services/`（領域邏輯，**完全不 import discord**）、`ui/`（Embed／分段）、`cogs/`（指令）。原 `video_summary.py` 一檔混三種職責，拆成客戶端／連結解析／Embed 三處。
+    - **指令層改用 discord.py Cogs**（對頻決議）：`main.py`（207 行）刪除，換成 `bot.py`（組裝＋路由）＋`__main__.py`＋六個 Cog（19～57 行）。排程改在 **`setup_hook`** 啟動，**因此拿掉了 `RemindSystem` 的 Singleton**——那層原本是為了擋 `on_ready` 在**斷線重連時重跑**而存在（拿掉前務必想清楚這點），`setup_hook` 只跑一次故不再需要；各排程迴圈開頭改加 `await client.wait_until_ready()` 等頻道快取就緒。
+    - **兩個差點被 Cogs 改掉的行為**：①`!查歌單abc`（沒打空格）——discord.py 會把整串當指令名而找不到指令，故在路由加 `insert_missing_space()`；②全形「！」轉半形靠**指派 `message.content`**（已確認 `content` 在 `discord.Message.__slots__` 內可指派）。③「吃什麼」的 `!<分類名>` 是執行期才知道的動態指令，無法註冊成靜態指令，改由路由在「找不到指令」時呼叫 `Eat.try_meal()`。
+    - **排程拆三層**：`runner.py`（何時跑）／`jobs.py`（排程表 `build_jobs()` 與內容產生）／`prompts.py`（文案）。**四段 Prompt 已用上一版模組逐字元比對，確認 100% 相同**（含中秋彩蛋那行）。啟動時多印一行實際生效的排程表，方便稽核。
+    - **HTTP**：兩個 n8n 客戶端各自手刻的 urllib POST（幾乎逐行重複）統一成 `clients/http.py` 的 `post_json()`，改用已相依的 `requests`，全專案只剩一套 HTTP 疊層；並在容器內對**真實** n8n 與 yt-music-mcp 各打一次確認連線正常（單元測試全是 mock，證明不了這件事）。
+    - **測試 57 → 102**：新增設定層、**訊息路由守門規則**（12 個，鎖住各頻道該回應什麼）、**Cog 註冊**（6 個，指令名打錯會被抓到）、HTTP 錯誤轉譯、排程表（時間／頻道／星期）等。測試檔案改為鏡射 `tm_bot/` 結構，`sys.path` 手腳全數刪除。
+    - **刻意放寬的三處微差**（皆為擴大、非縮小）：`!聽 abc`、`!心結 xxx` 這類帶多餘參數的指令現在也會正常執行（舊版需完全相符才觸發）；若試算表分類名與既有指令同名（如「抽」），現在只觸發指令、不會兩則都發；`_remind_message()`（固定文字提醒，原為註解狀態的死碼）刪除——同樣需求現在用一個 `ScheduledJob` 就能表達。
+    - **評估後未做**：排程時間仍用 naive `datetime.now()`，依賴容器 `TZ=Asia/Taipei`（實測正確）。改成顯式 `ZoneInfo("Asia/Taipei")` 可免除對環境變數的依賴，但需為 Windows 本機加 `tzdata` 相依，價值不足暫緩。
 
 ## 八、開場動作建議
 
