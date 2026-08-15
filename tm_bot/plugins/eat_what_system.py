@@ -1,18 +1,17 @@
 import logging
 import random
 
-from tm_bot.config_utils import read_config_file
 from tm_bot.google_sheet_utils import GoogleSheetUtils
 
 logger = logging.getLogger(__name__)
-
-CONFIG = read_config_file()
 
 LOAD_FAIL_MESSAGE = "「吃什麼」清單暫時載入失敗，請稍後再試 🙏"
 
 
 class EatWhatSystem:
-    def __init__(self):
+    def __init__(self, sheet_url, credential_path):
+        self.sheet_url = sheet_url
+        self.credential_path = credential_path
         # 延遲載入：啟動時不抓試算表，首次使用（或 on_ready 預載）時才載入，
         # Google Sheets 故障時機器人仍可啟動，僅此功能暫時降級
         self.total_answers_list = []
@@ -24,8 +23,8 @@ class EatWhatSystem:
         if self._loaded:
             return True
         try:
-            gsheets_app = GoogleSheetUtils.init_spreadsheet_api()
-            spread_sheet = gsheets_app.open_by_url(CONFIG.get("what_to_eat_url"))
+            gsheets_app = GoogleSheetUtils.authorize(self.credential_path)
+            spread_sheet = gsheets_app.open_by_url(self.sheet_url)
             ws = spread_sheet.worksheet_by_title("工作表1")
             raw_data = ws.get_all_values(
                 majdim="COLUMNS",

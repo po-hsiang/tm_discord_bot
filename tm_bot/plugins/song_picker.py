@@ -1,12 +1,6 @@
 import logging
-import os
-from pathlib import Path
 
 import requests
-from dotenv import load_dotenv
-
-# 本機直跑時從專案根載入 .env；Docker 部署由 compose.yaml 的 env_file 注入
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +16,8 @@ class SongPicker:
 
     TIMEOUT = (3, 30)  # (連線, 讀取)；跨歌單搜尋冷啟動可能較久
 
-    def __init__(self):
-        self.base_url = (os.getenv("YT_MUSIC_API_URL") or "").rstrip("/")
-        if not self.base_url:
-            raise RuntimeError(
-                "缺少 YT_MUSIC_API_URL 環境變數，"
-                "請依 .env.example 設定 .env（Docker 部署經 compose.yaml 的 env_file 注入）"
-            )
+    def __init__(self, base_url):
+        self.base_url = base_url.rstrip("/")
 
     def choose_one_song(self, keyword=""):
         params = {"count": 1}

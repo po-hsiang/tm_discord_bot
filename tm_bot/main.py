@@ -6,7 +6,7 @@ from functools import partial
 
 import discord
 
-from tm_bot.config_utils import read_config_file
+from tm_bot.config import get_settings
 from tm_bot.plugins.ai_agent_client import AIAgentClient
 from tm_bot.plugins.auto_reply_system import AutoReplySystem
 from tm_bot.plugins.eat_what_system import EatWhatSystem
@@ -22,7 +22,7 @@ from tm_bot.plugins.video_summary import (
 
 logger = logging.getLogger(__name__)
 
-CONFIG = read_config_file()
+SETTINGS = get_settings()
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -35,11 +35,17 @@ worker = ThreadPoolExecutor(max_workers=1)
 # 讓 AI 慢回覆不會卡住 !吃、!抽 等即時指令（AI 狀態都在 n8n 端，無共享狀態疑慮）
 ai_worker = ThreadPoolExecutor(max_workers=4)
 
-what_to_eat = EatWhatSystem()
-yt_song = SongPicker()
-ai_agent = AIAgentClient()
+what_to_eat = EatWhatSystem(SETTINGS.what_to_eat_url, SETTINGS.google_credential_path)
+yt_song = SongPicker(SETTINGS.yt_music_api_url)
+ai_agent = AIAgentClient(
+    SETTINGS.n8n_agent_webhook_url, SETTINGS.n8n_webhook_secret, SETTINGS.n8n_agent_timeout
+)
 auto_reply_system = AutoReplySystem()
-video_summary = VideoSummaryClient()
+video_summary = VideoSummaryClient(
+    SETTINGS.n8n_yt_summary_webhook_url,
+    SETTINGS.n8n_webhook_secret,
+    SETTINGS.n8n_yt_summary_timeout,
+)
 
 # 摘要進行中的影片（video_id → Future）：同影片同時被多人貼上時共用同一個請求，
 # 不重複打 n8n / LLM；完成後自動移除（成功結果的 TTL 快取在 plugin 內）
@@ -166,7 +172,7 @@ async def _handle_natural_message(message, user_msg, loop):
 async def on_ready():
     logger.info("機器人「%s」已上線。", client.user)
     asyncio.get_running_loop().run_in_executor(worker, _preload_data)
-    reminder_system = RemindSystem(client, ai_agent, yt_song, executor=ai_worker)
+    reminder_system = RemindSystem(client, ai_agent, yt_song, SETTINGS, executor=ai_worker)
     reminder_system.start()  # 啟動鬧鐘功能，定時提醒
 
 
@@ -181,20 +187,18 @@ async def on_message(message):
 
     # YouTube 影片快速摘要：專屬頻道（含測試頻道）貼影片連結即觸發，免指令
     if channel_id in (
-        CONFIG.get("video_summary_channel_id"),
-        CONFIG.get("test_channel_id"),
+        SETTINGS.video_summary_channel_id,
+        SETTINGS.test_channel_id,
     ):
         video_id = extract_video_id(message.content)
         if video_id:
             await _handle_video_summary(message, video_id, loop)
             return
-        if channel_id == CONFIG.get("video_summary_channel_id"):
+        if channel_id == SETTINGS.video_summary_channel_id:
             # 專屬頻道只處理影片連結，其他訊息靜默忽略
             return
 
-    if (channel_id != CONFIG.get("assistant_channel_id")) and (
-        channel_id != CONFIG.get("test_channel_id")
-    ):
+    if (channel_id != SETTINGS.assistant_channel_id) and (channel_id != SETTINGS.test_channel_id):
         return
 
     user_msg = message.content
@@ -214,4 +218,4 @@ async def on_message(message):
 if __name__ == "__main__":
     # root_logger=True：讓 discord.py 的 log 設定（時間戳格式、handler）
     # 同時套用到本專案所有模組的 logger，全部輸出走同一套格式
-    client.run(CONFIG.get("discord_bot_token"), root_logger=True)
+    client.run(SETTINGS.discord_bot_token, root_logger=True)

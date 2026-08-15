@@ -1,16 +1,8 @@
 import json
 import logging
-import os
 import urllib.request
-from pathlib import Path
-
-from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
-
-# 本機直跑時從專案根載入 .env；Docker 部署由 compose.yaml 的 env_file 注入
-# （容器內沒有 .env 檔案，load_dotenv 對不存在的路徑是 no-op）
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 API_FAIL_MESSAGE = "小粉絲的 AI 大腦暫時連不上線，請稍後再試 🙏"
 EMPTY_QUESTION_MESSAGE = "想問什麼呢？請在指令後面接上問題，例如：「!問 今天晚餐吃什麼好？」"
@@ -25,15 +17,10 @@ class AIAgentClient:
     傳入不同的 channel_id 即可隔離對話（例如早安排程用 morning-call）。
     """
 
-    def __init__(self):
-        self.webhook_url = os.getenv("N8N_AGENT_WEBHOOK_URL")
-        self.secret = os.getenv("N8N_WEBHOOK_SECRET")
-        self.timeout = int(os.getenv("N8N_AGENT_TIMEOUT", "60"))
-        if not self.webhook_url or not self.secret:
-            raise RuntimeError(
-                "缺少 N8N_AGENT_WEBHOOK_URL 或 N8N_WEBHOOK_SECRET 環境變數，"
-                "請依 .env.example 設定 .env（Docker 部署經 compose.yaml 的 env_file 注入）"
-            )
+    def __init__(self, webhook_url, secret, timeout=60):
+        self.webhook_url = webhook_url
+        self.secret = secret
+        self.timeout = timeout
 
     def ask(self, *args, **kwargs):
         question = str(kwargs.get("question") or "").strip()

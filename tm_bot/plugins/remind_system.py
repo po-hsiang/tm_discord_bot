@@ -5,7 +5,6 @@ import time
 from datetime import datetime
 from functools import partial
 
-from tm_bot.config_utils import read_config_file
 from tm_bot.plugins.ai_agent_client import API_FAIL_MESSAGE
 from tm_bot.plugins.holiday_lookup import KIND_MAKEUP, get_holiday_info
 
@@ -26,14 +25,15 @@ class RemindSystem:
     _instance = None
     _lock = threading.Lock()
 
-    # Singleton Pattern
+    # Singleton Pattern：on_ready 在每次斷線重連時都會再觸發，
+    # 靠這層保證排程任務只會被建立一次，不會重複發送早安
     def __new__(cls, *args, **kwargs):
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, client, ai_agent, yt_song_chooser, executor=None) -> None:
+    def __init__(self, client, ai_agent, yt_song_chooser, settings, executor=None) -> None:
         if not hasattr(self, "initialized"):
             self.initialized = True
 
@@ -41,12 +41,12 @@ class RemindSystem:
             self.client = client
             self.ai_agent = ai_agent
             self.yt_song_chooser = yt_song_chooser
+            self.settings = settings
             # 與指令處理共用同一個單執行緒 worker，
             # 阻塞的 GPT／歌單呼叫不會凍結事件迴圈，共享狀態也維持序列化存取
             self.executor = executor
             self.already_started = False  # 用來記錄是否已啟動過
             self._tasks = []  # 保留背景任務參考，避免被垃圾回收
-            self.config = read_config_file()
 
     @staticmethod
     async def _sleep_until_next_minute():
@@ -62,7 +62,7 @@ class RemindSystem:
             try:
                 now = datetime.now()
                 if self._is_due(now, target_time, weekdays):
-                    channel = self.client.get_channel(self.config.get("test_channel_id"))
+                    channel = self.client.get_channel(self.settings.test_channel_id)
                     if channel is None:
                         logger.warning("找不到提醒頻道（test_channel_id），本次提醒略過")
                     else:
@@ -98,7 +98,7 @@ class RemindSystem:
                         self.executor, partial(build_message, now, time_str)
                     )
                     if content is not None:
-                        channel = self.client.get_channel(self.config.get(channel_key))
+                        channel = self.client.get_channel(self.settings.channel_id(channel_key))
                         if channel is None:
                             logger.warning("找不到頻道（%s），本次%s略過", channel_key, task_label)
                         else:

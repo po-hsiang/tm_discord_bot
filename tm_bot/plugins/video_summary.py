@@ -1,17 +1,11 @@
 import json
 import logging
-import os
 import re
 import threading
 import time
 import urllib.request
-from pathlib import Path
 
 import discord
-from dotenv import load_dotenv
-
-# 本機直跑時從專案根載入 .env；Docker 部署由 compose.yaml 的 env_file 注入
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 logger = logging.getLogger(__name__)
 
@@ -98,16 +92,10 @@ class VideoSummaryClient:
 
     CACHE_TTL_SECONDS = 6 * 60 * 60
 
-    def __init__(self):
-        self.webhook_url = os.getenv("N8N_YT_SUMMARY_WEBHOOK_URL")
-        self.secret = os.getenv("N8N_WEBHOOK_SECRET")
-        # 逾時階梯最上層：bot 200 > n8n 190 > yt-music-mcp 180（上游留封包餘裕）
-        self.timeout = int(os.getenv("N8N_YT_SUMMARY_TIMEOUT", "200"))
-        if not self.webhook_url or not self.secret:
-            raise RuntimeError(
-                "缺少 N8N_YT_SUMMARY_WEBHOOK_URL 或 N8N_WEBHOOK_SECRET 環境變數，"
-                "請依 .env.example 設定 .env（Docker 部署經 compose.yaml 的 env_file 注入）"
-            )
+    def __init__(self, webhook_url, secret, timeout=200):
+        self.webhook_url = webhook_url
+        self.secret = secret
+        self.timeout = timeout
         # 快取由 ai_worker 執行緒池的多條執行緒共用，讀寫都上鎖
         self._cache = {}
         self._cache_lock = threading.Lock()

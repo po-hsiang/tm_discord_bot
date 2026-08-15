@@ -237,14 +237,8 @@ class TestMorningHolidayEasterEgg(unittest.TestCase):
 
 class TestAskTimeoutOverride(unittest.TestCase):
     def _make_client(self):
-        with mock.patch.dict(
-            "os.environ",
-            {
-                "N8N_AGENT_WEBHOOK_URL": "http://localhost:5678/webhook/test",
-                "N8N_WEBHOOK_SECRET": "test-secret",
-            },
-        ):
-            return ai_agent_client.AIAgentClient()
+        # 設定改由建構子注入，測試不再需要動 os.environ
+        return ai_agent_client.AIAgentClient("http://localhost:5678/webhook/test", "test-secret")
 
     def _ask_and_capture_timeout(self, client, **kwargs):
         captured = {}
