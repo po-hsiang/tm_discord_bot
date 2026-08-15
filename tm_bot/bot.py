@@ -19,6 +19,7 @@ from tm_bot.clients.yt_summary import VideoSummaryClient
 from tm_bot.config import get_settings
 from tm_bot.services.eat import EatWhatSystem
 from tm_bot.services.scheduler import RemindSystem
+from tm_bot.services.youtube import extract_video_id
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,12 @@ COG_VIDEO_SUMMARY = "VideoSummary"
 # 需要接參數的指令：使用者常常不打空格（「!查歌單abc」），
 # discord.py 會把整串當成指令名而找不到指令，於是在此補回空格
 COMMANDS_ACCEPTING_ARGS = ("查歌單",)
+
+# 訊息路線
+ROUTE_IGNORE = "ignore"  # 不屬於本機器人服務範圍，靜默忽略
+ROUTE_VIDEO = "video"  # 影片快速摘要
+ROUTE_COMMAND = "command"  # ! 開頭的指令
+ROUTE_AI = "ai"  # 自然語言對話
 
 
 def insert_missing_space(content, prefix=COMMAND_PREFIX):
@@ -133,6 +140,30 @@ class TmBot(commands.Bot):
             self.settings.test_channel_id,
         )
 
+    def classify(self, channel_id, content):
+        """決定一則訊息該走哪條路，回傳 (路線, 影片 ID)。
+
+        純決策、不做任何 I/O，所有頻道守門規則集中在此，可單獨測試。
+        """
+        video_id = extract_video_id(content)
+
+        # 1) YouTube 影片快速摘要：專屬頻道（含測試頻道）貼影片連結即觸發，免指令
+        if self._is_video_channel(channel_id):
+            if video_id is not None:
+                return ROUTE_VIDEO, video_id
+            if channel_id == self.settings.video_summary_channel_id:
+                # 專屬頻道只處理影片連結，其他訊息靜默忽略
+                return ROUTE_IGNORE, None
+
+        # 2) 其餘功能只服務助手頻道與測試頻道
+        if not self._is_ai_channel(channel_id):
+            return ROUTE_IGNORE, None
+
+        if content.startswith(COMMAND_PREFIX):
+            return ROUTE_COMMAND, None
+        # 3) 其餘任何訊息（含純圖片／貼圖）一律視為自然語言
+        return ROUTE_AI, None
+
     async def on_message(self, message):
         # 忽略所有機器人（含自己）的發言，避免機器人互聊迴圈
         if message.author.bot:
@@ -142,31 +173,23 @@ class TmBot(commands.Bot):
         if "！" in message.content:
             message.content = message.content.replace("！", "!")
 
-        channel_id = message.channel.id
+        route, video_id = self.classify(message.channel.id, message.content)
 
-        # 1) YouTube 影片快速摘要：專屬頻道（含測試頻道）貼影片連結即觸發，免指令
-        if self._is_video_channel(channel_id):
-            if await self.get_cog(COG_VIDEO_SUMMARY).try_handle(message):
-                return
-            if channel_id == self.settings.video_summary_channel_id:
-                # 專屬頻道只處理影片連結，其他訊息靜默忽略
-                return
-
-        # 2) 其餘功能只服務助手頻道與測試頻道
-        if not self._is_ai_channel(channel_id):
+        if route == ROUTE_IGNORE:
             return
-
-        if message.content.startswith(COMMAND_PREFIX):
+        if route == ROUTE_VIDEO:
+            await self.get_cog(COG_VIDEO_SUMMARY).summarize(message, video_id)
+            return
+        if route == ROUTE_COMMAND:
             message.content = insert_missing_space(message.content)
             ctx = await self.get_context(message)
             if ctx.valid:
                 await self.invoke(ctx)
                 return
-            # 3) 沒有對應的指令 → 可能是「吃什麼」的動態分類（分類名來自試算表）
+            # 沒有對應的指令 → 可能是「吃什麼」的動態分類（分類名來自試算表）
             await self.get_cog(COG_EAT).try_meal(message)
             return
 
-        # 4) 其餘任何訊息（含純圖片／貼圖）一律視為自然語言，交給 AI
         await self.get_cog(COG_AI_CHAT).reply(message)
 
 

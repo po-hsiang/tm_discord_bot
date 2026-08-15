@@ -6,7 +6,6 @@ import contextlib
 import discord
 from discord.ext import commands
 
-from tm_bot.services.youtube import extract_video_id
 from tm_bot.ui.embeds import SILENT_ERROR_CODES, build_embed, build_error_message
 
 WORKING_REACTION = "⏳"
@@ -19,15 +18,8 @@ class VideoSummary(commands.Cog):
         # 不重複打 n8n / LLM；完成後自動移除（成功結果的 TTL 快取在客戶端內）
         self._inflight = {}
 
-    async def try_handle(self, message):
-        """訊息含 YouTube 影片連結就處理並回傳 True；否則回傳 False 交還給路由。"""
-        video_id = extract_video_id(message.content)
-        if video_id is None:
-            return False
-        await self._summarize(message, video_id)
-        return True
-
-    async def _summarize(self, message, video_id):
+    async def summarize(self, message, video_id):
+        """由路由在判定為影片訊息時呼叫（video_id 已於路由端解析）。"""
         # 摘要可能跑數十秒，用 ⏳ reaction 代替 typing indicator 讓使用者知道有在處理
         with contextlib.suppress(discord.HTTPException):
             await message.add_reaction(WORKING_REACTION)
