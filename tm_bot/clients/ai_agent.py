@@ -1,6 +1,6 @@
-import json
 import logging
-import urllib.request
+
+from tm_bot.clients.http import WebhookError, post_json
 
 logger = logging.getLogger(__name__)
 
@@ -40,22 +40,13 @@ class AIAgentClient:
             "stickers": stickers,
         }
         try:
-            req = urllib.request.Request(
-                self.webhook_url,
-                method="POST",
-                data=json.dumps(payload).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Webhook-Secret": self.secret,
-                },
-            )
-            with urllib.request.urlopen(req, timeout=timeout) as res:
-                body = json.loads(res.read().decode("utf-8"))
-            reply = str(body.get("reply") or "").strip()
-            if reply:
-                return reply
-            logger.warning("n8n 回覆為空，body 鍵：%s", list(body.keys()))
-            return API_FAIL_MESSAGE
-        except Exception as e:
+            body = post_json(self.webhook_url, payload, self.secret, timeout)
+        except WebhookError as e:
             logger.error("呼叫 n8n webhook 失敗：%s", e)
             return API_FAIL_MESSAGE
+
+        reply = str(body.get("reply") or "").strip()
+        if reply:
+            return reply
+        logger.warning("n8n 回覆為空，body 鍵：%s", list(body.keys()))
+        return API_FAIL_MESSAGE

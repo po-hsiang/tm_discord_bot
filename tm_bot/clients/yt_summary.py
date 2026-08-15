@@ -1,8 +1,8 @@
-import json
 import logging
 import threading
 import time
-import urllib.request
+
+from tm_bot.clients.http import WebhookError, post_json
 
 logger = logging.getLogger(__name__)
 
@@ -47,23 +47,11 @@ class VideoSummaryClient:
             "url": f"https://www.youtube.com/watch?v={video_id}",
         }
         try:
-            req = urllib.request.Request(
-                self.webhook_url,
-                method="POST",
-                data=json.dumps(payload).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Webhook-Secret": self.secret,
-                },
-            )
-            with urllib.request.urlopen(req, timeout=self.timeout) as res:
-                body = json.loads(res.read().decode("utf-8"))
-        except Exception as e:
+            body = post_json(self.webhook_url, payload, self.secret, self.timeout)
+        except WebhookError as e:
             logger.error("呼叫 n8n yt-summary 失敗：%s", e)
             return {"ok": False, "error_code": "UPSTREAM_ERROR"}
 
-        if not isinstance(body, dict):
-            return {"ok": False, "error_code": "UPSTREAM_ERROR"}
         if body.get("ok"):
             if isinstance(body.get("summary"), dict):
                 return body
