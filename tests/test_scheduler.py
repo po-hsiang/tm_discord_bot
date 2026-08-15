@@ -37,11 +37,11 @@ class FakeSongChooser:
 
 
 def make_remind_system(ai_agent, yt_song_chooser=None):
-    # 繞過 Singleton 的 __new__ 與需要 .env/config.ini 的 __init__，只掛測試所需屬性
-    rs = object.__new__(RemindSystem)
-    rs.ai_agent = ai_agent
-    rs.yt_song_chooser = yt_song_chooser
-    return rs
+    # 建構子只做屬性指派，測試可直接建立
+    # （過去需要 object.__new__ 繞過 Singleton 與 .env／config.ini 的讀取）
+    return RemindSystem(
+        client=None, ai_agent=ai_agent, yt_song_chooser=yt_song_chooser, settings=None
+    )
 
 
 class TestNightTrends(unittest.TestCase):

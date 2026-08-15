@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import threading
 import time
 from datetime import datetime
 from functools import partial
@@ -22,31 +21,21 @@ GAME_DEALS_SENTINEL = "GAME_DEALS_UNAVAILABLE"
 
 
 class RemindSystem:
-    _instance = None
-    _lock = threading.Lock()
+    """早安／晚間話題／遊戲情報的定時推播。
 
-    # Singleton Pattern：on_ready 在每次斷線重連時都會再觸發，
-    # 靠這層保證排程任務只會被建立一次，不會重複發送早安
-    def __new__(cls, *args, **kwargs):
-        with cls._lock:
-            if cls._instance is None:
-                cls._instance = super().__new__(cls)
-        return cls._instance
+    由 TmBot.setup_hook 建立並啟動；setup_hook 只在啟動時跑一次、斷線重連不會重跑，
+    因此不再需要過去那層用來防止重複建立排程的 Singleton。
+    """
 
     def __init__(self, client, ai_agent, yt_song_chooser, settings, executor=None) -> None:
-        if not hasattr(self, "initialized"):
-            self.initialized = True
-
-            # 初始化工作，以下這區塊只會執行一次
-            self.client = client
-            self.ai_agent = ai_agent
-            self.yt_song_chooser = yt_song_chooser
-            self.settings = settings
-            # 與指令處理共用同一個單執行緒 worker，
-            # 阻塞的 GPT／歌單呼叫不會凍結事件迴圈，共享狀態也維持序列化存取
-            self.executor = executor
-            self.already_started = False  # 用來記錄是否已啟動過
-            self._tasks = []  # 保留背景任務參考，避免被垃圾回收
+        self.client = client
+        self.ai_agent = ai_agent
+        self.yt_song_chooser = yt_song_chooser
+        self.settings = settings
+        # 阻塞的 AI／歌單呼叫丟到執行緒池，不凍結事件迴圈
+        self.executor = executor
+        self.already_started = False  # 用來記錄是否已啟動過
+        self._tasks = []  # 保留背景任務參考，避免被垃圾回收
 
     @staticmethod
     async def _sleep_until_next_minute():
@@ -58,6 +47,8 @@ class RemindSystem:
 
     async def _remind_message(self, time_str, message_content, weekdays=None):
         target_time = datetime.strptime(time_str, "%H:%M")
+        # 排程在 setup_hook 就啟動（早於 Gateway 連線），先等頻道快取就緒再開始輪詢
+        await self.client.wait_until_ready()
         while True:
             try:
                 now = datetime.now()
@@ -89,6 +80,8 @@ class RemindSystem:
         weekdays 不傳＝每天執行，傳 [4]＝只在星期五執行。
         """
         target_time = datetime.strptime(time_str, "%H:%M")
+        # 排程在 setup_hook 就啟動（早於 Gateway 連線），先等頻道快取就緒再開始輪詢
+        await self.client.wait_until_ready()
         while True:
             try:
                 now = datetime.now()
