@@ -64,6 +64,7 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 - **舊 YouTube API Key**：曾明碼外露的那把 Key 已無任何服務使用，可在 GCP Console 直接刪除（主人自辦）。
 
 **待辦（依價值排序）**
+- **定期回探 Places API 的 `reviewSummary` 是否開放台灣／中文**（見第七節補記 31）：一開放就能把 Maps 評論摘要從「1 則摘錄」升級成「Google 官方跨全部評論的主題摘要」，改動只在 n8n 那層與 `ui/maps.py`。探法：對台灣地點的 Place Details field mask 加 `reviewSummary`，看欄位有沒有回。
 - **n8n 端 `tw_trends_news` 擴充**：熱搜 3→5、頭條 3→5（已擬好交辦 prompt，見第七節補記 17；bot 端不依賴條數，n8n 可獨立上線）。
 - **`!重載` 指令**：「吃什麼」清單目前要重啟才會重載。改用 Cogs 後成本已大幅降低——Cog 熱重載直接用 `bot.reload_extension()`，清單重載只需把 `EatWhatSystem._loaded` 歸位。
 - **ai_worker 壅塞觀察**：聊天 AI、影片摘要（最長 200 秒）、晚間話題共用 4 執行緒，極端情況會互相排隊。
@@ -168,6 +169,15 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
     - **bot ↔ n8n 契約**：請求 `POST {"url": "<地圖連結>"}`（Header `X-Webhook-Secret`）。成功回 `{"ok": true, "place": {name, address, maps_uri, rating, rating_count}, "review": {verdict, positive[], negative[], caveat}, "sources": [{title, uri}]}`；失敗回 `{"ok": false, "error_code": …}`，錯誤碼定義在 `ui/maps.py` 的 `MAPS_ERROR_MESSAGES`（`URL_UNRESOLVED`／`NOT_A_PLACE`／`NO_REVIEW_DATA`／`MISSING_SOURCES`／`SUMMARY_FAILED`／`UPSTREAM_ERROR`）。除 `place.name` 外皆選填，缺哪段就少呈現那段。
     - **試營運的關掉方式**：`N8N_MAPS_REVIEW_WEBHOOK_URL` 留空 → 路由的 `_is_maps_channel()` 直接回 False，貼地圖連結的行為與串接前完全相同。要開給其他頻道就填 `config/config.ini` 的 `maps_review_channel_id`。
     - 測試 139 → 180（連結辨識含「不可與 YouTube 連結互相誤判」與偽造網域、契約驗證、Embed 版型、路由守門五項）。**輸出格式主人看過實際結果後可能會調整**，調版型只動 `ui/maps.py`。
+
+31. **（2026-08-17）Maps 評論摘要實測與「誠實版」定案**。串起來之後對兩家板橋店家實測多輪，結論與當初的預期不同，**接手者務必先讀這條再談改進**：
+    - **grounding 每次只撈到約一則評論**。Klatch（649 則評論）三輪都只回 1 則評論來源；洋朵（2,933 則評論）約 1/3 機率直接回 `NO_REVIEW_DATA`（n8n 端已加摘要階段重試一次，仍救不回全部）。官方那句「insights from millions of user reviews」描述的是**語料庫規模**，不是單次查詢的取得量。**這比 Places API 穩定給的 5 則還少。**
+    - **正解存在但台灣沒開**：Places API 有 `reviewSummary` 欄位（Gemini 跨全部評論歸納主題、GA 正式版、`Place Details Enterprise + Atmosphere` SKU），顯示 Google 自己的摘要還能繞開「衍生作品」灰色地帶。但**支援語言只有英／日／葡／西，地區清單沒有台灣、完全沒有中文**；`generativeSummary`（地點摘要）更窄，只有英文＋印度和美國。→ 已列入待辦定期回探。
+    - **因此版型定案為「誠實版」**（見 `ui/maps.py` 模組 docstring 的三點決定）：評分掛帥並移出頁尾避免重複；樣本大小由 `_provenance_line()` **程式計算**後明講（不是小字，因為對判讀影響很大）；負評區塊永遠顯示且措辭限定在「這次摘到的評論」。
+    - **一個容易再犯的失真**：grounding 回的 `sources` **混了「店家頁面」與「評論」兩種**，早期版本直接數 sources 說「2 筆來源」，讀起來像看了兩則評論——實際只有一則。現以 `REVIEW_URI_MARKER = "/maps/reviews"` 只數評論來源，辨識不出任何評論時改講「這次沒有取得可對照的評論來源」而**不編數字**。該網址形狀是實測觀察、官方未載明，有降級措辭保護。
+    - **另一個觀察（尚未處理）**：洋朵那次產出了具體負評（無障礙車位、純素選擇少）卻沒有任何評論來源——推測來自 Place Details 的結構化屬性而非評論。若要更精確，可請 n8n 端把「設施事實」與「評論摘錄」分開回傳，bot 端再分區呈現。
+    - **意外驗證到排程冪等**：19:32 重建容器（晚間話題 19:30 剛發完 2 分鐘），log 顯示「檢查晚間話題是否漏發（原定 19:30，現已遲 2 分鐘）」→「今日已處理過，略過本次」。沒有補記 29 那套持久化，這次重啟就會讓好虎粉收到兩份晚間話題。
+    - 測試 180 → 189。
 
 ## 八、開場動作建議
 

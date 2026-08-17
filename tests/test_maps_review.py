@@ -19,7 +19,17 @@ REVIEW = {
     "positive": ["小籠包皮薄湯多", "服務細心"],
     "negative": ["假日等超過一小時", "價格偏高"],
 }
-SOURCES = [{"title": "鼎泰豐 信義店", "uri": "https://maps.google.com/?cid=123"}]
+# 真實資料的來源清單長這樣：一筆店家頁面 ＋ 一筆評論。
+# 只有後者算評論樣本，前者不是任何人的評論
+PLACE_SOURCE = {
+    "title": "鼎泰豐 信義店 - Google Maps",
+    "uri": "https://maps.google.com/maps?cid=123",
+}
+REVIEW_SOURCE = {
+    "title": "Review of 鼎泰豐 信義店 - Google Maps",
+    "uri": "https://www.google.com/maps/reviews/data=!4m6!14m5!1m4",
+}
+SOURCES = [PLACE_SOURCE, REVIEW_SOURCE]
 
 
 def make_client():
@@ -96,6 +106,17 @@ class TestMapsErrorMessage(unittest.TestCase):
         self.assertEqual(message, MAPS_ERROR_MESSAGES["UPSTREAM_ERROR"])
 
 
+def many_sources(count):
+    return [{"title": f"來源{i}", "uri": f"https://example.com/{i}"} for i in range(count)]
+
+
+def review_sources(count):
+    return [
+        {"title": f"Review {i}", "uri": f"https://www.google.com/maps/reviews/data=!{i}"}
+        for i in range(count)
+    ]
+
+
 class TestMapsEmbed(unittest.TestCase):
     def setUp(self):
         self.embed = build_maps_embed(ok_body())
@@ -103,6 +124,12 @@ class TestMapsEmbed(unittest.TestCase):
     def test_title_and_link(self):
         self.assertEqual(self.embed.title, "鼎泰豐 信義店")
         self.assertEqual(self.embed.url, "https://maps.google.com/?cid=123")
+
+    def test_rating_leads_the_description(self):
+        # 評分是唯一可靠的彙總信號，必須是第一眼看到的東西
+        first_line = self.embed.description.splitlines()[0]
+        self.assertIn("⭐ **4.3**", first_line)
+        self.assertIn("1,847 則評論", first_line)
 
     def test_description_has_verdict_and_both_sides(self):
         description = self.embed.description
@@ -112,38 +139,88 @@ class TestMapsEmbed(unittest.TestCase):
         self.assertIn("👎", description)
         self.assertIn("• 假日等超過一小時", description)
 
+    def test_footer_is_attribution_only(self):
+        # 評分已在描述開頭，頁尾不再重複同一組數字
+        self.assertEqual(self.embed.footer.text, "資料來源 Google Maps")
+
     def test_sources_field_is_present_with_bracketed_links(self):
         # 來源是規定而非裝飾；角括號抑制 Discord 預覽卡片
         field = next(f for f in self.embed.fields if "來源" in f.name)
-        self.assertIn("(<https://maps.google.com/?cid=123>)", field.value)
+        self.assertIn("(<https://maps.google.com/maps?cid=123>)", field.value)
+        self.assertEqual(len(field.value.splitlines()), 2)
 
-    def test_footer_has_rating_and_attribution(self):
-        self.assertIn("⭐ 4.3", self.embed.footer.text)
-        self.assertIn("1,847 則評論", self.embed.footer.text)
-        self.assertIn("Google Maps", self.embed.footer.text)
+    def test_sources_are_capped(self):
+        embed = build_maps_embed(ok_body(sources=many_sources(12)))
+        field = next(f for f in embed.fields if "來源" in f.name)
+        self.assertEqual(len(field.value.splitlines()), 5)
 
     def test_optional_fields_can_be_absent(self):
         embed = build_maps_embed({"place": {"name": "某店"}, "review": {}, "sources": []})
         self.assertEqual(embed.title, "某店")
         self.assertIsNone(embed.url)
-        self.assertEqual(embed.description, "")
-        self.assertIn("Google Maps", embed.footer.text)
-
-    def test_caveat_is_rendered_as_small_text(self):
-        review = dict(REVIEW, caveat="評論偏少，僅供參考")
-        embed = build_maps_embed(ok_body(review=review))
-        self.assertIn("-# ⚠️ 評論偏少，僅供參考", embed.description)
-
-    def test_sources_are_capped(self):
-        many = [{"title": f"來源{i}", "uri": f"https://example.com/{i}"} for i in range(12)]
-        embed = build_maps_embed(ok_body(sources=many))
-        field = next(f for f in embed.fields if "來源" in f.name)
-        self.assertEqual(len(field.value.splitlines()), 5)
+        self.assertIn("👎", embed.description)  # 負評區塊仍在
+        self.assertEqual(embed.footer.text, "資料來源 Google Maps")
 
     def test_garbage_rating_count_does_not_crash(self):
-        place = dict(PLACE, rating_count="很多")
-        embed = build_maps_embed(ok_body(place=place))
-        self.assertIn("Google Maps", embed.footer.text)
+        embed = build_maps_embed(ok_body(place=dict(PLACE, rating_count="很多")))
+        self.assertIn("⭐ **4.3**", embed.description)
+
+
+class TestNegativeSectionAlwaysShown(unittest.TestCase):
+    """實測發現 negative 幾乎永遠是空的（只撈到一則評論），
+    整段消失會讓人以為壞掉，宣稱「這家店沒負評」又是過度推論。"""
+
+    def test_empty_negative_says_what_is_actually_true(self):
+        embed = build_maps_embed(ok_body(review=dict(REVIEW, negative=[])))
+        self.assertIn("👎 **負評**", embed.description)
+        self.assertIn("這次摘到的評論裡沒有出現負評", embed.description)
+
+    def test_missing_negative_key_behaves_the_same(self):
+        review = {"verdict": "還不錯", "positive": ["好吃"]}
+        self.assertIn("沒有出現負評", build_maps_embed(ok_body(review=review)).description)
+
+
+class TestProvenanceLine(unittest.TestCase):
+    """樣本大小的交代由程式計算——模型曾經只拿到一則評論卻回空的 caveat。"""
+
+    def test_thin_sample_counts_reviews_not_sources(self):
+        # 兩筆來源其實是「一筆店家頁面 + 一則評論」，說 2 就是多報
+        description = build_maps_embed(ok_body()).description
+        self.assertIn("以上摘自 Google Maps 提供的 1 則評論", description)
+        self.assertIn("不代表 1,847 則評論的整體風向", description)
+        # 不是小字：樣本大小對判讀的影響太大，不該被當附註
+        self.assertNotIn("-# ⚠️ 以上摘自", description)
+
+    def test_warning_omits_comparison_when_rating_count_unknown(self):
+        place = {k: v for k, v in PLACE.items() if k != "rating_count"}
+        description = build_maps_embed(ok_body(place=place)).description
+        self.assertIn("1 則評論，樣本偏少僅供參考", description)
+
+    def test_no_identifiable_review_source_avoids_inventing_a_number(self):
+        description = build_maps_embed(ok_body(sources=[PLACE_SOURCE])).description
+        self.assertIn("這次沒有取得可對照的評論來源", description)
+
+    def test_enough_reviews_drops_the_warning(self):
+        description = build_maps_embed(ok_body(sources=review_sources(3))).description
+        self.assertNotIn("以上摘自", description)
+        self.assertNotIn("沒有取得可對照", description)
+
+    def test_model_caveat_shown_only_when_sample_is_not_thin(self):
+        # 樣本足夠時，模型的 caveat 講的才是別的事（例如評論互相矛盾）
+        review = dict(REVIEW, caveat="評論內容互相矛盾")
+        body = ok_body(review=review, sources=review_sources(3))
+        self.assertIn("-# ⚠️ 評論內容互相矛盾", build_maps_embed(body).description)
+
+    def test_model_caveat_suppressed_when_thin_warning_already_fired(self):
+        # 兩條都講會變成重複警告，以程式算的那條為準
+        review = dict(REVIEW, caveat="撈到的評論偏少")
+        description = build_maps_embed(ok_body(review=review)).description
+        self.assertIn("以上摘自", description)
+        self.assertNotIn("撈到的評論偏少", description)
+
+    def test_sources_without_uri_do_not_count_as_sample(self):
+        body = ok_body(sources=[*SOURCES, {"title": "沒有網址"}])
+        self.assertIn("提供的 1 則評論", build_maps_embed(body).description)
 
 
 if __name__ == "__main__":

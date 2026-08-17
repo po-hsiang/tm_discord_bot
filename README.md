@@ -3,7 +3,7 @@
 一隻為遊戲實況主「老虎喵喵喵（虎喵）」粉絲社群打造的 Discord 互動機器人。
 以「虎喵小粉絲」的人設與好虎粉互動，功能涵蓋 AI 聊天問答（含圖片/貼圖理解）、YouTube 影片快速摘要、每日早安招呼、每晚台灣熱門話題、每週五遊戲特惠情報、隨機點歌、吃什麼抽選、抽籤等。
 
-> 版本：`0.5.0`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜儲存：MongoDB Atlas｜部署：Docker Compose
+> 版本：`0.5.1`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜儲存：MongoDB Atlas｜部署：Docker Compose
 
 **架構**：bot 本體只負責 Discord 連線、指令路由與輕量原生功能，重活外包給微服務——
 AI 能力（模型、人設、工具、對話記憶）在 n8n「TM AI Agent」工作流（多客戶端共用）；
@@ -56,13 +56,17 @@ AI 能力（模型、人設、工具、對話記憶）在 n8n「TM AI Agent」�
 在測試頻道（或填了 `maps_review_channel_id` 的頻道）**貼上 Google 地圖連結即觸發**：
 
 1. 機器人以 ⏳ reaction 表示處理中。
-2. 完成後回覆 Embed：店名（可點擊到 Maps）＋一句話總評＋👍 好評／👎 負評條列＋地址＋**Google Maps 來源連結**＋頁尾「⭐ 評分｜評論數｜資料來源 Google Maps」。
+2. 完成後回覆 Embed：店名（可點擊到 Maps）→ **⭐ 評分／評論總數**（唯一可靠的彙總信號，故放在最前面）→ 一句話總評 → 👍 好評／👎 負評條列 → **樣本大小提醒** → 地址 → **Google Maps 來源連結** → 頁尾歸屬。
 3. 支援 `maps.app.goo.gl` 分享短網址、`google.com/maps/place/…`、`maps.google.com/…` 與各地區網域（如 `google.com.tw`）。
 4. 帶地圖連結的**指令仍以指令優先**（`!吃 <連結>` 不會被摘要攔走）。
 5. 同一連結同時被多人貼上只發一次請求；**刻意不做快取**（見下）。
 
 > 流程：bot → n8n「maps-review」工作流 →〔Maps Grounding Lite 解析短網址 → Gemini 以 `google_maps` 工具 grounding〕→ 結構化結果。
+>
+> **⚠️ 這個功能的能力邊界（2026-08-17 實測，看數字再期待）**：Maps grounding 每次只撈到**一則左右**的評論——一家 649 則評論的店只回 1 則，2,933 則的店約 1/3 機率整個失敗（n8n 端已加重試）。Google 自己那套跨全部評論的 `reviewSummary` 欄位**台灣與中文都還不在支援範圍**（僅英／日／葡／西語的特定國家）。因此版型刻意做成「誠實版」：**評分掛帥**（真正可靠的只有評分與評論數）、**樣本大小由程式計算後明講**（模型曾只拿到一則評論卻回空的提醒，自我察覺不可靠）、**負評區塊永遠顯示**（0 筆時明講「這次摘到的評論裡沒有出現負評」，而不是宣稱這家店沒負評）。
+>
 > **兩個設計上的硬性限制**：① Maps Platform 條款禁止 pre-fetch／cache／store Places 內容（僅 place ID 例外），grounded 輸出的快取規則官方未交代，因此**不留任何快取**；② grounded 內容**必須附上 Google Maps 來源連結**且一次互動內可見，故 bot 端把「沒有 sources」視為失敗（`MISSING_SOURCES`），寧可不貼也不貼沒有出處的摘要。
+>
 > 未設定 `N8N_MAPS_REVIEW_WEBHOOK_URL` 時整個功能不啟用，貼地圖連結的行為與設定前完全相同。
 
 ### ⏰ 排程功能
