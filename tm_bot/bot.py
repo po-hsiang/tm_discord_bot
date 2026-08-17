@@ -14,10 +14,12 @@ import discord
 from discord.ext import commands
 
 from tm_bot.clients.ai_agent import AIAgentClient
+from tm_bot.clients.maps_review import MapsReviewClient
 from tm_bot.clients.yt_music import SongPicker
 from tm_bot.clients.yt_summary import VideoSummaryClient
 from tm_bot.config import get_settings
 from tm_bot.services.eat import EatWhatSystem
+from tm_bot.services.maps import extract_maps_url
 from tm_bot.services.scheduler.jobs import build_jobs
 from tm_bot.services.scheduler.runner import Scheduler
 from tm_bot.services.youtube import extract_video_id
@@ -37,12 +39,14 @@ EXTENSIONS = (
     "tm_bot.cogs.eat",
     "tm_bot.cogs.ai_chat",
     "tm_bot.cogs.video_summary",
+    "tm_bot.cogs.maps_review",
 )
 
 # Cog 的名稱（qualified_name）；路由以名稱查詢，熱重載後仍取得到最新的實例
 COG_EAT = "Eat"
 COG_AI_CHAT = "AiChat"
 COG_VIDEO_SUMMARY = "VideoSummary"
+COG_MAPS_REVIEW = "MapsReview"
 
 # 需要接參數的指令：使用者常常不打空格（「!查歌單abc」），
 # discord.py 會把整串當成指令名而找不到指令，於是在此補回空格
@@ -52,6 +56,7 @@ COMMANDS_ACCEPTING_ARGS = ("查歌單",)
 ROUTE_IGNORE = "ignore"  # 不屬於本機器人服務範圍，靜默忽略
 ROUTE_VIDEO = "video"  # 影片快速摘要
 ROUTE_COMMAND = "command"  # ! 開頭的指令
+ROUTE_MAPS = "maps"  # Google Maps 評論摘要
 ROUTE_AI = "ai"  # 自然語言對話
 
 
@@ -95,6 +100,11 @@ class TmBot(commands.Bot):
             settings.n8n_yt_summary_webhook_url,
             settings.n8n_webhook_secret,
             settings.n8n_yt_summary_timeout,
+        )
+        self.maps_review = MapsReviewClient(
+            settings.n8n_maps_review_webhook_url,
+            settings.n8n_webhook_secret,
+            settings.n8n_maps_review_timeout,
         )
         self.what_to_eat = EatWhatSystem(settings.what_to_eat_url, settings.google_credential_path)
 
@@ -153,9 +163,20 @@ class TmBot(commands.Bot):
             self.settings.test_channel_id,
         )
 
-    def classify(self, channel_id, content):
-        """決定一則訊息該走哪條路，回傳 (路線, 影片 ID)。
+    def _is_maps_channel(self, channel_id):
+        # 未設定 webhook 時整個功能不啟用，貼地圖連結的行為與設定前完全相同
+        if not self.settings.n8n_maps_review_webhook_url:
+            return False
+        # 試營運階段只在測試頻道生效；要開給其他頻道就填 config.ini 的 maps_review_channel_id
+        return channel_id in (
+            self.settings.maps_review_channel_id,
+            self.settings.test_channel_id,
+        )
 
+    def classify(self, channel_id, content):
+        """決定一則訊息該走哪條路，回傳 (路線, 標的)。
+
+        標的隨路線而異：影片路線是 video_id、地圖路線是網址，其餘為 None。
         純決策、不做任何 I/O，所有頻道守門規則集中在此，可單獨測試。
         """
         video_id = extract_video_id(content)
@@ -174,7 +195,14 @@ class TmBot(commands.Bot):
 
         if content.startswith(COMMAND_PREFIX):
             return ROUTE_COMMAND, None
-        # 3) 其餘任何訊息（含純圖片／貼圖）一律視為自然語言
+
+        # 3) Google Maps 評論摘要：放在指令之後，帶地圖連結的指令仍以指令優先
+        if self._is_maps_channel(channel_id):
+            maps_url = extract_maps_url(content)
+            if maps_url is not None:
+                return ROUTE_MAPS, maps_url
+
+        # 4) 其餘任何訊息（含純圖片／貼圖）一律視為自然語言
         return ROUTE_AI, None
 
     async def on_message(self, message):
@@ -186,12 +214,15 @@ class TmBot(commands.Bot):
         if "！" in message.content:
             message.content = message.content.replace("！", "!")
 
-        route, video_id = self.classify(message.channel.id, message.content)
+        route, target = self.classify(message.channel.id, message.content)
 
         if route == ROUTE_IGNORE:
             return
         if route == ROUTE_VIDEO:
-            await self.get_cog(COG_VIDEO_SUMMARY).summarize(message, video_id)
+            await self.get_cog(COG_VIDEO_SUMMARY).summarize(message, target)
+            return
+        if route == ROUTE_MAPS:
+            await self.get_cog(COG_MAPS_REVIEW).review(message, target)
             return
         if route == ROUTE_COMMAND:
             message.content = insert_missing_space(message.content)

@@ -1,7 +1,7 @@
 import unittest
 
 from tests.factories import make_settings
-from tm_bot.bot import ROUTE_AI, ROUTE_COMMAND, ROUTE_IGNORE, ROUTE_VIDEO, TmBot
+from tm_bot.bot import ROUTE_AI, ROUTE_COMMAND, ROUTE_IGNORE, ROUTE_MAPS, ROUTE_VIDEO, TmBot
 
 ASSISTANT = 111
 TEST = 222
@@ -10,6 +10,7 @@ VIDEO = 555
 OUTSIDE = 999
 
 VIDEO_LINK = "這部超好笑 https://youtu.be/dQw4w9WgXcQ"
+MAPS_LINK = "這家不錯 https://maps.app.goo.gl/AbCdEf123"
 
 
 def route_of(bot, channel_id, content):
@@ -79,6 +80,27 @@ class TestClassify(unittest.TestCase):
     def test_plain_text_in_test_channel_goes_to_ai(self):
         self.assertEqual(self.route(TEST, "安安"), ROUTE_AI)
 
+    # --- Google Maps 評論摘要（試營運：只在測試頻道生效）---
+
+    def test_maps_link_in_test_channel(self):
+        route, maps_url = self.bot.classify(TEST, MAPS_LINK)
+        self.assertEqual(route, ROUTE_MAPS)
+        self.assertEqual(maps_url, "https://maps.app.goo.gl/AbCdEf123")
+
+    def test_maps_link_beats_ai_in_test_channel(self):
+        self.assertNotEqual(self.route(TEST, MAPS_LINK), ROUTE_AI)
+
+    def test_command_with_maps_link_stays_a_command(self):
+        # 指令優先：「!吃 <地圖連結>」不該被摘要功能攔走
+        self.assertEqual(self.route(TEST, f"!吃 {MAPS_LINK}"), ROUTE_COMMAND)
+
+    def test_maps_link_in_assistant_channel_goes_to_ai(self):
+        # 試營運階段助手頻道不啟用，維持原本的自然語言行為
+        self.assertEqual(self.route(ASSISTANT, MAPS_LINK), ROUTE_AI)
+
+    def test_maps_link_in_video_channel_is_ignored(self):
+        self.assertEqual(self.route(VIDEO, MAPS_LINK), ROUTE_IGNORE)
+
     # --- 其他頻道 ---
 
     def test_chitchat_channel_is_ignored(self):
@@ -114,6 +136,27 @@ class TestClassifyWithoutVideoChannel(unittest.TestCase):
     def test_none_channel_id_does_not_swallow_other_channels(self):
         # video_summary_channel_id 為 None 時不可誤判成「任何頻道」
         self.assertEqual(route_of(self.bot, OUTSIDE, "安安"), ROUTE_IGNORE)
+
+
+class TestClassifyWithoutMapsWebhook(unittest.TestCase):
+    """未設定 N8N_MAPS_REVIEW_WEBHOOK_URL 時，貼地圖連結的行為要與設定前完全相同。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.bot = TmBot(
+            make_settings(
+                assistant_channel_id=ASSISTANT,
+                test_channel_id=TEST,
+                n8n_maps_review_webhook_url="",
+            )
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        shutdown(cls.bot)
+
+    def test_maps_link_falls_back_to_ai(self):
+        self.assertEqual(route_of(self.bot, TEST, MAPS_LINK), ROUTE_AI)
 
 
 if __name__ == "__main__":

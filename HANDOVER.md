@@ -35,6 +35,7 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 | 持久化（連線、資料庫黑名單、排程執行紀錄） | `tm_bot/storage/`；集合結構與 mongosh 查詢範例見 README「🗄️ 持久化」一節 |
 | 新增一個 `!` 指令 | 於 `tm_bot/cogs/` 新增檔案，並加進 `bot.py` 的 `EXTENSIONS`（不需改既有檔案） |
 | 影片摘要的模型與提詞 | n8n「YouTube 影片快速摘要」工作流（id `t2OrIkAIr29Qws3S`；**存檔即生效**，不用動 bot） |
+| 地圖評論摘要的解析、grounding、摘要提詞 | n8n「maps-review」工作流（**主人的 n8n Agent 維護**；存檔即生效）。bot 端只認連結、驗契約、排版 |
 | 歌單載入/快取/搜尋、影片資訊/字幕/音訊端點 | `yt-music-mcp` 微服務（**另一專案的 Agent 維護**，這邊只提需求） |
 | 台灣熱搜／天氣／遊戲特惠來源（`tw_trends_news`／`tw_weather`／`game_deals` 工具） | n8n 端工具（主人與其 n8n Agent 另行維護） |
 | 頻道 ID 等非機敏設定 | `config/config.ini`（改完需重建部署） |
@@ -158,6 +159,15 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
     - **補發規則**：`ScheduledJob.catchup_hours` 放在排程表裡（早安 3、晚間話題 3、遊戲情報 2）。補發**不跨日**是自然結果而非額外判斷——過午夜後「今天的 target」落在未來，`now <= target` 就直接跳過。補發時傳給內容產生器的 `time_str` 改成**當下真實時間**，訊息不會宣稱自己是七點半發的。
     - **驗證**（單元測試全是假物件，證明不了真實語意，故另做三層）：① 對真實 Atlas 跑完整 repository 流程 11 項全通過（`DuplicateKeyError`、`find_one_and_update` 條件寫入的行為與測試假設一致）；② 端對端跑真正的發送流程送訊息到測試頻道，第一次 `True`、第二次被紀錄擋下 `False`，紀錄 `status=sent`／`chars` 正確，事後清除；③ 部署後容器內 log 確認「MongoDB 已連線」。測試 102 → 139。
     - **部署時機的坑（已寫入雷點 10）**：紀錄庫是空的時候，若在補發時窗內啟動，會把今天已發過的推播誤判為漏發而重發。本次刻意選在 11:48（三個時窗都不在範圍）部署。
+
+30. **（2026-08-17）Google Maps 評論摘要 bot 端串接（🧪 試營運）**。主人的原始構想是「Places API 拉近期評論 → LLM 濾工商 → 摘要好負評」，查證後**改走 Grounding 路線**，原因（皆有官方出處，見 README 技術棧與功能一覽）：
+    - **Places API 的 `reviews` 官方定義是「sorted by relevance. A maximum of 5 reviews can be returned.」** — 5 則硬上限、且新版 API 無任何評論排序參數（拿不到「近期」）。5 則濾掉工商後剩 3 則，「摘要」比直接貼原文還沒用，功能價值不成立。
+    - **Grounding with Google Maps（Gemini API）** 的檢索在 Google 端完成，官方描述為「insights from millions of user reviews」，不受 5 則限制；另有 **Maps Grounding Lite 的 Resolution API** 官方支援 `maps.app.goo.gl` 短網址解析。成本也更低：grounding 每月 5,000 次免費、之後 $14／1,000；Places API 含 reviews 屬最貴 SKU（Enterprise + Atmosphere，月免費僅 1,000、之後 $25／1,000）。
+    - **代價要記住**：「LLM 逐則濾工商假帳號」這一步**做不到也留不下來** — grounding 拿不到原始評論。只能在 n8n 端的 Prompt 要求模型對業配腔調保持懷疑，**無法驗證它實際濾了什麼**。回報給使用者時不要宣稱這是可驗證的過濾。
+    - **兩條寫進程式的硬性規定**：① Maps 條款禁止 pre-fetch／cache／store Places 內容（僅 place ID 例外），grounded 輸出的快取規則官方未交代 → `clients/maps_review.py` **刻意沒有 TTL 快取**（與 `yt_summary.py` 最大的差別，該檔開頭有註解說明），只有 Cog 端的 in-flight 去重；② grounded 內容必須附 Maps 來源連結且一次互動內可見 → 回應沒有可用 `sources` 時直接視為失敗（`MISSING_SOURCES`），**寧可不貼也不貼沒出處的摘要**。
+    - **bot ↔ n8n 契約**：請求 `POST {"url": "<地圖連結>"}`（Header `X-Webhook-Secret`）。成功回 `{"ok": true, "place": {name, address, maps_uri, rating, rating_count}, "review": {verdict, positive[], negative[], caveat}, "sources": [{title, uri}]}`；失敗回 `{"ok": false, "error_code": …}`，錯誤碼定義在 `ui/maps.py` 的 `MAPS_ERROR_MESSAGES`（`URL_UNRESOLVED`／`NOT_A_PLACE`／`NO_REVIEW_DATA`／`MISSING_SOURCES`／`SUMMARY_FAILED`／`UPSTREAM_ERROR`）。除 `place.name` 外皆選填，缺哪段就少呈現那段。
+    - **試營運的關掉方式**：`N8N_MAPS_REVIEW_WEBHOOK_URL` 留空 → 路由的 `_is_maps_channel()` 直接回 False，貼地圖連結的行為與串接前完全相同。要開給其他頻道就填 `config/config.ini` 的 `maps_review_channel_id`。
+    - 測試 139 → 180（連結辨識含「不可與 YouTube 連結互相誤判」與偽造網域、契約驗證、Embed 版型、路由守門五項）。**輸出格式主人看過實際結果後可能會調整**，調版型只動 `ui/maps.py`。
 
 ## 八、開場動作建議
 
