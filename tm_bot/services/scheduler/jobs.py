@@ -102,12 +102,28 @@ class ScheduledMessages:
 
 
 def build_jobs(ai_agent, yt_song_chooser):
-    """本專案的排程表——要加、要改推播時間，動這裡就好。"""
+    """本專案的排程表——要加、要改推播時間，動這裡就好。
+
+    catchup_hours 是「開機補發的容許遲到時數」：機器人若在推播時刻沒開著，
+    啟動後只要還在這個時窗內就補發一次，超過就當作錯過（遲到太久反而突兀）。
+    補發不跨日，所以 22:00 的遊戲情報實際補到當天 23:59 為止。
+    """
     messages = ScheduledMessages(ai_agent, yt_song_chooser)
     return (
-        ScheduledJob("早安", "7:30", "chitchat_channel_id", messages.morning_greeting),
-        ScheduledJob("晚間話題", "19:30", "chitchat_channel_id", messages.night_trends),
+        # 早安補到 10:30——過了上午再說早安就怪了
         ScheduledJob(
-            "遊戲情報", "22:00", "game_deals_channel_id", messages.game_deals, weekdays=(4,)
+            "早安", "7:30", "chitchat_channel_id", messages.morning_greeting, catchup_hours=3
+        ),
+        # 晚間話題補到 22:30，還在大家掛在線上的時段
+        ScheduledJob(
+            "晚間話題", "19:30", "chitchat_channel_id", messages.night_trends, catchup_hours=3
+        ),
+        ScheduledJob(
+            "遊戲情報",
+            "22:00",
+            "game_deals_channel_id",
+            messages.game_deals,
+            weekdays=(4,),
+            catchup_hours=2,
         ),
     )

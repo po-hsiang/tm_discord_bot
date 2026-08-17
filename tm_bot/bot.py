@@ -21,6 +21,8 @@ from tm_bot.services.eat import EatWhatSystem
 from tm_bot.services.scheduler.jobs import build_jobs
 from tm_bot.services.scheduler.runner import Scheduler
 from tm_bot.services.youtube import extract_video_id
+from tm_bot.storage.mongo import create_database, ping
+from tm_bot.storage.schedule_runs import ScheduleRunRepository
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +97,13 @@ class TmBot(commands.Bot):
             settings.n8n_yt_summary_timeout,
         )
         self.what_to_eat = EatWhatSystem(settings.what_to_eat_url, settings.google_credential_path)
-        self.scheduler = Scheduler(self, settings, executor=self.ai_worker)
+
+        # 持久化：未設定 MONGODB_URI／MONGODB_DB 時為 None，相關功能自動停用；
+        # 設定指向不屬於本專案的資料庫則會在此拋出例外，不讓機器人帶著錯誤設定啟動
+        self.database = create_database(settings.mongodb_uri, settings.mongodb_db)
+        self.schedule_runs = ScheduleRunRepository(self.database)
+
+        self.scheduler = Scheduler(self, settings, executor=self.ai_worker, runs=self.schedule_runs)
         self.scheduler.add(*build_jobs(self.ai_agent, self.yt_song))
 
     # --- 阻塞呼叫的統一入口（避免每個 Cog 各自寫 run_in_executor + partial）---
@@ -123,6 +131,11 @@ class TmBot(commands.Bot):
         # （歌單的載入與快取已由 yt-music-mcp 微服務負責，不需預載）
         # 保留 task 參考，避免執行中的預載被垃圾回收掉
         self._preload_task = asyncio.create_task(self.run_blocking(self.what_to_eat.ensure_loaded))
+
+        # 驗證 Mongo 是否真的連得上；連不上只留紀錄，機器人照常上線
+        # （排程屆時退化為不做防重複與補發，不影響推播本身）
+        if await self.run_blocking(ping, self.database):
+            await self.run_blocking(self.schedule_runs.ensure_indexes)
 
         self.scheduler.start()
 

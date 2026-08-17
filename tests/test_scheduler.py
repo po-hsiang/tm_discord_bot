@@ -1,7 +1,8 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest import mock
 
+from tests.factories import make_settings
 from tm_bot.clients.ai_agent import API_FAIL_MESSAGE
 from tm_bot.services.scheduler.jobs import (
     AI_RETRY_DELAY,
@@ -11,7 +12,12 @@ from tm_bot.services.scheduler.jobs import (
     build_jobs,
 )
 from tm_bot.services.scheduler.prompts import GAME_DEALS_SENTINEL
-from tm_bot.services.scheduler.runner import is_due
+from tm_bot.services.scheduler.runner import (
+    ScheduledJob,
+    Scheduler,
+    catch_up_delay,
+    is_due,
+)
 
 MONDAY_NIGHT = datetime(2026, 8, 3, 22, 0)
 MONDAY_MORNING = datetime(2026, 8, 3, 7, 30)
@@ -56,18 +62,21 @@ class TestScheduleTable(unittest.TestCase):
         self.assertEqual(job.time_str, "7:30")
         self.assertEqual(job.channel_key, "chitchat_channel_id")
         self.assertIsNone(job.weekdays)  # 每天
+        self.assertEqual(job.catchup_hours, 3)  # 補到 10:30，過了上午說早安就怪了
 
     def test_night_trends_job(self):
         job = self.jobs["晚間話題"]
         self.assertEqual(job.time_str, "19:30")
         self.assertEqual(job.channel_key, "chitchat_channel_id")
         self.assertIsNone(job.weekdays)
+        self.assertEqual(job.catchup_hours, 3)
 
     def test_game_deals_job_is_friday_only(self):
         job = self.jobs["遊戲情報"]
         self.assertEqual(job.time_str, "22:00")
         self.assertEqual(job.channel_key, "game_deals_channel_id")
         self.assertEqual(job.weekdays, (4,))  # 只在星期五
+        self.assertEqual(job.catchup_hours, 2)
 
 
 class TestNightTrends(unittest.TestCase):
@@ -251,6 +260,218 @@ class TestMorningHolidayEasterEgg(unittest.TestCase):
 
         self.assertIn("早安呀！", greeting)
         self.assertNotIn("節日彩蛋", agent.calls[-1]["question"])
+
+
+class TestCatchUpDelay(unittest.TestCase):
+    """開機補發的時間規則（不含「發過了沒」的判斷，那是紀錄庫的事）。"""
+
+    TARGET = datetime.strptime("7:30", "%H:%M")
+
+    def test_returns_none_before_target_time(self):
+        # 今天還沒到七點半：交給正常排程，不是補發的事
+        self.assertIsNone(catch_up_delay(datetime(2026, 8, 17, 6, 0), self.TARGET, None, 3))
+
+    def test_returns_delay_within_window(self):
+        delay = catch_up_delay(datetime(2026, 8, 17, 9, 15), self.TARGET, None, 3)
+        self.assertEqual(delay, timedelta(hours=1, minutes=45))
+
+    def test_returns_none_after_window(self):
+        # 遲超過三小時（10:30 之後）就不補了，這時候才說早安反而突兀
+        self.assertIsNone(catch_up_delay(datetime(2026, 8, 17, 11, 0), self.TARGET, None, 3))
+
+    def test_boundary_of_window_still_catches_up(self):
+        self.assertIsNotNone(catch_up_delay(datetime(2026, 8, 17, 10, 30), self.TARGET, None, 3))
+
+    def test_zero_hours_disables_catch_up(self):
+        self.assertIsNone(catch_up_delay(datetime(2026, 8, 17, 8, 0), self.TARGET, None, 0))
+
+    def test_weekday_filter_applies(self):
+        friday_target = datetime.strptime("22:00", "%H:%M")
+        # 2026-08-08 為星期六：即使時間在窗內，非排定星期也不補
+        self.assertIsNone(catch_up_delay(datetime(2026, 8, 8, 23, 0), friday_target, (4,), 2))
+        self.assertIsNotNone(catch_up_delay(datetime(2026, 8, 7, 23, 0), friday_target, (4,), 2))
+
+    def test_catch_up_never_crosses_midnight(self):
+        # 週五 22:00 的推播，到了週六凌晨就不該再補（今天的 target 落在未來）
+        friday_target = datetime.strptime("22:00", "%H:%M")
+        self.assertIsNone(catch_up_delay(datetime(2026, 8, 8, 0, 30), friday_target, (4,), 2))
+
+
+class FakeChannel:
+    def __init__(self):
+        self.sent = []
+
+    async def send(self, content):
+        self.sent.append(content)
+
+
+class FakeClient:
+    def __init__(self, channel=None):
+        self.channel = channel
+
+    async def wait_until_ready(self):
+        return
+
+    def get_channel(self, _channel_id):
+        return self.channel
+
+
+class FakeRuns:
+    """記錄呼叫順序的假紀錄庫，用來驗證認領／釋放／標記的時機。"""
+
+    def __init__(self, allow=True, enabled=True):
+        self.allow = allow
+        self.enabled = enabled
+        self.calls = []
+
+    def claim(self, job_label, day, fail_open=True):
+        self.calls.append(("claim", job_label, day, fail_open))
+        return self.allow
+
+    def release(self, job_label, day):
+        self.calls.append(("release", job_label, day))
+
+    def mark_sent(self, job_label, day, chars):
+        self.calls.append(("mark_sent", job_label, day, chars))
+
+    def names(self):
+        return [call[0] for call in self.calls]
+
+
+def make_scheduler(runs, channel=None):
+    return Scheduler(FakeClient(channel), make_settings(), runs=runs)
+
+
+def make_job(build, **overrides):
+    values = {
+        "label": "早安",
+        "time_str": "7:30",
+        "channel_key": "chitchat_channel_id",
+        "build": build,
+    }
+    values.update(overrides)
+    return ScheduledJob(**values)
+
+
+class TestDispatch(unittest.IsolatedAsyncioTestCase):
+    """發送流程的可靠度：認領 → 產生內容 → 發送 → 記錄。"""
+
+    async def test_successful_send_marks_sent(self):
+        runs = FakeRuns()
+        channel = FakeChannel()
+        scheduler = make_scheduler(runs, channel)
+
+        sent = await scheduler._dispatch(make_job(lambda now, t: "早安啊"), MONDAY_MORNING, "7:30")
+
+        self.assertTrue(sent)
+        self.assertEqual(channel.sent, ["早安啊"])
+        self.assertEqual(runs.names(), ["claim", "mark_sent"])
+        self.assertEqual(runs.calls[-1], ("mark_sent", "早安", MONDAY_MORNING.date(), 3))
+
+    async def test_refused_claim_sends_nothing(self):
+        # 今天已經發過（或另一個實例正在處理）：連內容都不該去產
+        runs = FakeRuns(allow=False)
+        channel = FakeChannel()
+        built = []
+
+        def build(now, time_str):
+            built.append(now)
+            return "早安啊"
+
+        sent = await make_scheduler(runs, channel)._dispatch(
+            make_job(build), MONDAY_MORNING, "7:30"
+        )
+
+        self.assertFalse(sent)
+        self.assertEqual(channel.sent, [])
+        self.assertEqual(built, [])
+        self.assertEqual(runs.names(), ["claim"])
+
+    async def test_silent_skip_releases_claim(self):
+        # 內容產不出來（AI 兩次都失敗）→ 認領要還回去，稍後補發才有機會重試
+        runs = FakeRuns()
+        channel = FakeChannel()
+
+        sent = await make_scheduler(runs, channel)._dispatch(
+            make_job(lambda now, t: None), MONDAY_MORNING, "7:30"
+        )
+
+        self.assertFalse(sent)
+        self.assertEqual(channel.sent, [])
+        self.assertEqual(runs.names(), ["claim", "release"])
+
+    async def test_missing_channel_releases_claim(self):
+        runs = FakeRuns()
+
+        sent = await make_scheduler(runs, channel=None)._dispatch(
+            make_job(lambda now, t: "早安啊"), MONDAY_MORNING, "7:30"
+        )
+
+        self.assertFalse(sent)
+        self.assertEqual(runs.names(), ["claim", "release"])
+
+    async def test_exception_releases_claim_and_propagates(self):
+        runs = FakeRuns()
+
+        def build(now, time_str):
+            raise RuntimeError("boom")
+
+        with self.assertRaises(RuntimeError):
+            await make_scheduler(runs, FakeChannel())._dispatch(
+                make_job(build), MONDAY_MORNING, "7:30"
+            )
+
+        self.assertEqual(runs.names(), ["claim", "release"])
+
+
+class TestCatchUp(unittest.IsolatedAsyncioTestCase):
+    TARGET = datetime.strptime("7:30", "%H:%M")
+
+    async def test_disabled_storage_never_catches_up(self):
+        # 沒有紀錄就無從判斷發過沒，硬補等於每次重啟都洗版
+        runs = FakeRuns(enabled=False)
+        channel = FakeChannel()
+
+        await make_scheduler(runs, channel)._catch_up(
+            make_job(lambda now, t: "早安啊"), self.TARGET
+        )
+
+        self.assertEqual(runs.calls, [])
+        self.assertEqual(channel.sent, [])
+
+    async def test_catch_up_claims_fail_closed(self):
+        runs = FakeRuns()
+        channel = FakeChannel()
+        scheduler = make_scheduler(runs, channel)
+        job = make_job(lambda now, t: "補發的早安")
+
+        with mock.patch(
+            "tm_bot.services.scheduler.runner.datetime", wraps=datetime
+        ) as fake_datetime:
+            fake_datetime.now.return_value = datetime(2026, 8, 17, 9, 15)
+            await scheduler._catch_up(job, self.TARGET)
+
+        self.assertEqual(channel.sent, ["補發的早安"])
+        # fail_open=False：Mongo 剛好不通就別補，寧可漏發也不要重複發
+        self.assertEqual(runs.calls[0], ("claim", "早安", datetime(2026, 8, 17).date(), False))
+
+    async def test_catch_up_reports_the_real_current_time(self):
+        # 09:15 補發卻宣稱「現在時間是 7:30」會很奇怪，要如實告知內容產生器
+        runs = FakeRuns()
+        seen = []
+        scheduler = make_scheduler(runs, FakeChannel())
+
+        def build(now, time_str):
+            seen.append(time_str)
+            return "補發的早安"
+
+        with mock.patch(
+            "tm_bot.services.scheduler.runner.datetime", wraps=datetime
+        ) as fake_datetime:
+            fake_datetime.now.return_value = datetime(2026, 8, 17, 9, 5)
+            await scheduler._catch_up(make_job(build), self.TARGET)
+
+        self.assertEqual(seen, ["9:05"])
 
 
 if __name__ == "__main__":

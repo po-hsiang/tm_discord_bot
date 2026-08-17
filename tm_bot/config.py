@@ -34,6 +34,14 @@ _REQUIRED_ENV = {
     "n8n_webhook_secret": "N8N_WEBHOOK_SECRET",
 }
 
+# 選填字串設定：未填不是錯誤，而是「該功能停用」
+_OPTIONAL_STR_ENV = {
+    # 持久化：兩者皆填才啟用。未設定時排程仍正常推播，
+    # 只是退化為沒有防重複與開機補發（見 tm_bot/storage/）
+    "mongodb_uri": "MONGODB_URI",
+    "mongodb_db": "MONGODB_DB",
+}
+
 # 選填設定：「欄位名 →（環境變數名, 預設值）」
 _OPTIONAL_INT_ENV = {
     "n8n_agent_timeout": ("N8N_AGENT_TIMEOUT", 60),
@@ -77,6 +85,11 @@ class Settings:
     n8n_agent_timeout: int
     n8n_yt_summary_timeout: int
 
+    # --- MongoDB Atlas（持久化）---
+    # 選填：未設定則持久化停用，機器人其餘功能完全不受影響
+    mongodb_uri: str = ""
+    mongodb_db: str = ""
+
     @property
     def google_credential_path(self) -> Path:
         """GCP 服務帳戶憑證的完整路徑（不入版控，Docker 以唯讀 volume 掛載）。"""
@@ -99,6 +112,10 @@ def _load_env_values() -> dict:
             f"缺少機敏環境變數：{missing}，"
             "請依 .env.example 設定 .env（Docker 部署經 compose.yaml 的 env_file 注入）"
         )
+
+    for key, env_name in _OPTIONAL_STR_ENV.items():
+        # 去頭尾空白：從 Atlas 網頁複製連線字串時很容易帶到換行
+        values[key] = (os.getenv(env_name) or "").strip()
 
     for key, (env_name, default) in _OPTIONAL_INT_ENV.items():
         values[key] = int(os.getenv(env_name) or default)

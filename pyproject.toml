@@ -1,6 +1,6 @@
 [project]
 name = "tm-discord-bot"
-version = "0.3.0"
+version = "0.4.0"
 description = ""
 readme = "README.md"
 authors = [{ name = "po-hsiang", email = "wsxxcv11733@gmail.com" }]
@@ -10,6 +10,7 @@ dependencies = [
     "discord>=2.3.2,<3",
     "holidays>=0.102,<1",
     "pygsheets>=2.0.6,<3",
+    "pymongo>=4.10,<5",
     "python-dotenv>=1.0,<2",
     "requests>=2.31,<3",
 ]
