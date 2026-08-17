@@ -31,6 +31,12 @@ REVIEW_SOURCE = {
 }
 SOURCES = [PLACE_SOURCE, REVIEW_SOURCE]
 
+FACTS = {
+    "yes": ["內用", "外帶", "只收現金"],
+    "no": ["外送", "無障礙停車位"],
+    "price_level": "平價",
+}
+
 
 def make_client():
     return MapsReviewClient("http://n8n/webhook/maps-review", "secret", 120)
@@ -42,7 +48,13 @@ def call_with(body):
 
 
 def ok_body(**overrides):
-    body = {"ok": True, "place": dict(PLACE), "review": dict(REVIEW), "sources": list(SOURCES)}
+    body = {
+        "ok": True,
+        "place": dict(PLACE),
+        "review": dict(REVIEW),
+        "facts": dict(FACTS),
+        "sources": list(SOURCES),
+    }
     body.update(overrides)
     return body
 
@@ -125,34 +137,26 @@ class TestMapsEmbed(unittest.TestCase):
         self.assertEqual(self.embed.title, "鼎泰豐 信義店")
         self.assertEqual(self.embed.url, "https://maps.google.com/?cid=123")
 
-    def test_rating_leads_the_description(self):
-        # 評分是唯一可靠的彙總信號，必須是第一眼看到的東西
+    def test_headline_carries_rating_count_and_price(self):
+        # 評分是最可靠的彙總信號，必須是第一眼看到的東西
         first_line = self.embed.description.splitlines()[0]
         self.assertIn("⭐ **4.3**", first_line)
         self.assertIn("1,847 則評論", first_line)
+        self.assertIn("💰 平價", first_line)
 
-    def test_description_has_verdict_and_both_sides(self):
+    def test_both_review_sides_are_listed(self):
         description = self.embed.description
-        self.assertIn("小籠包穩定好吃", description)
-        self.assertIn("👍", description)
+        self.assertIn("👍 **好評**", description)
         self.assertIn("• 小籠包皮薄湯多", description)
-        self.assertIn("👎", description)
+        self.assertIn("👎 **負評**", description)
         self.assertIn("• 假日等超過一小時", description)
 
     def test_footer_is_attribution_only(self):
-        # 評分已在描述開頭，頁尾不再重複同一組數字
         self.assertEqual(self.embed.footer.text, "資料來源 Google Maps")
 
-    def test_sources_field_is_present_with_bracketed_links(self):
-        # 來源是規定而非裝飾；角括號抑制 Discord 預覽卡片
-        field = next(f for f in self.embed.fields if "來源" in f.name)
-        self.assertIn("(<https://maps.google.com/maps?cid=123>)", field.value)
-        self.assertEqual(len(field.value.splitlines()), 2)
-
-    def test_sources_are_capped(self):
-        embed = build_maps_embed(ok_body(sources=many_sources(12)))
-        field = next(f for f in embed.fields if "來源" in f.name)
-        self.assertEqual(len(field.value.splitlines()), 5)
+    def test_garbage_rating_count_does_not_crash(self):
+        embed = build_maps_embed(ok_body(place=dict(PLACE, rating_count="很多")))
+        self.assertIn("⭐ **4.3**", embed.description)
 
     def test_optional_fields_can_be_absent(self):
         embed = build_maps_embed({"place": {"name": "某店"}, "review": {}, "sources": []})
@@ -161,9 +165,82 @@ class TestMapsEmbed(unittest.TestCase):
         self.assertIn("👎", embed.description)  # 負評區塊仍在
         self.assertEqual(embed.footer.text, "資料來源 Google Maps")
 
-    def test_garbage_rating_count_does_not_crash(self):
-        embed = build_maps_embed(ok_body(place=dict(PLACE, rating_count="很多")))
+    def test_body_without_facts_still_renders(self):
+        # facts 是後加欄位，舊版 n8n 回應不含它
+        body = {k: v for k, v in ok_body().items() if k != "facts"}
+        embed = build_maps_embed(body)
         self.assertIn("⭐ **4.3**", embed.description)
+        self.assertNotIn("💰", embed.description)
+
+
+class TestRemovedSections(unittest.TestCase):
+    """主人看過實際輸出後點名移除的東西——回歸時要抓得到。"""
+
+    def setUp(self):
+        self.description = build_maps_embed(ok_body()).description
+
+    def test_no_verdict(self):
+        self.assertNotIn("小籠包穩定好吃", self.description)
+
+    def test_no_address(self):
+        self.assertNotIn("信義路二段", self.description)
+        self.assertEqual(build_maps_embed(ok_body()).fields, [])
+
+    def test_no_blank_lines_between_blocks(self):
+        self.assertNotIn("\n\n", self.description)
+
+
+class TestFactsLines(unittest.TestCase):
+    """facts 的鐵則：只印清單裡有的標籤，不從缺漏推論「沒有 XX」。"""
+
+    def test_yes_and_no_render_as_one_line_each(self):
+        description = build_maps_embed(ok_body()).description
+        self.assertIn("✅ 內用 · 外帶 · 只收現金", description)
+        self.assertIn("❌ 外送 · 無障礙停車位", description)
+
+    def test_empty_lists_render_nothing(self):
+        facts = {"yes": [], "no": [], "price_level": ""}
+        description = build_maps_embed(ok_body(facts=facts)).description
+        self.assertNotIn("✅", description)
+        self.assertNotIn("❌", description)
+
+    def test_unlisted_attributes_are_never_claimed_absent(self):
+        # 「外送」不在任何清單裡＝Google 沒登錄，不可渲染成沒有外送
+        facts = {"yes": ["內用"], "no": []}
+        description = build_maps_embed(ok_body(facts=facts)).description
+        self.assertIn("✅ 內用", description)
+        self.assertNotIn("外送", description)
+
+    def test_price_level_alone_still_shows(self):
+        place = {k: v for k, v in PLACE.items() if k not in ("rating", "rating_count")}
+        body = ok_body(place=place, facts={"price_level": "高價"})
+        self.assertIn("💰 高價", build_maps_embed(body).description.splitlines()[0])
+
+    def test_non_dict_facts_does_not_crash(self):
+        self.assertIn("⭐", build_maps_embed(ok_body(facts=["內用"])).description)
+
+
+class TestSourcesLine(unittest.TestCase):
+    """來源是 Google 對 grounded 內容的要求，壓成一行小字但不能移除。"""
+
+    def test_compact_single_line_with_short_labels(self):
+        description = build_maps_embed(ok_body()).description
+        last_line = description.splitlines()[-1]
+        self.assertTrue(last_line.startswith("-# 來源："))
+        # 角括號抑制 Discord 預覽卡片；網址一律原樣用 Google 給的
+        self.assertIn("[地點](<https://maps.google.com/maps?cid=123>)", last_line)
+        self.assertIn(
+            "[評論1](<https://www.google.com/maps/reviews/data=!4m6!14m5!1m4>)", last_line
+        )
+
+    def test_sources_are_capped_to_one_short_line(self):
+        embed = build_maps_embed(ok_body(sources=review_sources(12)))
+        last_line = embed.description.splitlines()[-1]
+        self.assertEqual(last_line.count("[評論"), 4)
+
+    def test_no_sources_means_no_line(self):
+        description = build_maps_embed(ok_body(sources=[])).description
+        self.assertNotIn("來源：", description)
 
 
 class TestNegativeSectionAlwaysShown(unittest.TestCase):
