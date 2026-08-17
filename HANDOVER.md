@@ -2,7 +2,7 @@
 
 > **給主人的使用說明**：新開 session 時，請助理「先完整閱讀專案根目錄的 HANDOVER.md 再開始工作」即可。
 > **給接手助理的說明**：正文（一～六節）為**當前現況**，第七節為**歷史紀錄**（凍結不改，新變更往後追加編號）。
-> 正文最後更新：2026-08-15。功能與檔案結構的細節以 `README.md` 為準，本文件記錄 README 沒有的：協作共識、跨服務架構、環境雷點、待辦。
+> 正文最後更新：2026-08-17。功能與檔案結構的細節以 `README.md` 為準，本文件記錄 README 沒有的：協作共識、跨服務架構、環境雷點、待辦。
 
 ---
 
@@ -31,7 +31,8 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 | --- | --- |
 | AI 人設、模型、工具、對話記憶 | n8n「TM AI Agent」工作流（id `vlZLOnZI69bLfqXk`，編輯 `http://localhost:5678/workflow/vlZLOnZI69bLfqXk`；原名「Discord AI Agent」，2026-08-10 更名並改為多客戶端共用）；bot 端只是 HTTP 客戶端 `tm_bot/clients/ai_agent.py` |
 | 早安/晚間話題/遊戲情報的**文案** | `tm_bot/services/scheduler/prompts.py`（改完需重建部署） |
-| 排程的**時間、頻道、星期** | `tm_bot/services/scheduler/jobs.py` 的 `build_jobs()`（一則推播一個 `ScheduledJob`） |
+| 排程的**時間、頻道、星期、補發時窗** | `tm_bot/services/scheduler/jobs.py` 的 `build_jobs()`（一則推播一個 `ScheduledJob`） |
+| 持久化（連線、資料庫黑名單、排程執行紀錄） | `tm_bot/storage/`；集合結構與 mongosh 查詢範例見 README「🗄️ 持久化」一節 |
 | 新增一個 `!` 指令 | 於 `tm_bot/cogs/` 新增檔案，並加進 `bot.py` 的 `EXTENSIONS`（不需改既有檔案） |
 | 影片摘要的模型與提詞 | n8n「YouTube 影片快速摘要」工作流（id `t2OrIkAIr29Qws3S`；**存檔即生效**，不用動 bot） |
 | 歌單載入/快取/搜尋、影片資訊/字幕/音訊端點 | `yt-music-mcp` 微服務（**另一專案的 Agent 維護**，這邊只提需求） |
@@ -53,6 +54,7 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 7. **`yt-playlist-sorter` 容器是主人的排程服務，勿動。**
 8. **匯入一律用絕對路徑 `from tm_bot.xxx import ...`**，並以 `python -m tm_bot` 於**專案根**啟動（2026-08-15 重構後；直接跑檔案路徑會讓絕對匯入失效）。測試不再需要 `sys.path` 手腳。
 9. **設定只在 `tm_bot/config.py` 讀**：其他模組不要自己 `os.getenv`／`load_dotenv`，需要什麼值由建構子傳進去（過去散在四個模組、且以 `parents[N]` 硬數目錄層數，檔案一搬家就靜默失效）。
+10. **MongoDB Atlas（2026-08-17 起）**：同叢集有 Twitch Bot 的 `tm_twitch_bot`，**絕對不可存取**（`storage/mongo.py` 的 `FORBIDDEN_DB_NAMES` 會在啟動時擋下）。免費方案 M0，Network Access 走 IP 白名單——**主機對外 IP 一變就會靜默連不上**（bot 仍正常運作，只是排程退化），連不上時 log 會有「MongoDB 連線失敗」。另：**清空 `schedule_runs` 後的第一次啟動，若正好落在補發時窗內（早安 07:30–10:30、晚間話題 19:30–22:30、遊戲情報週五 22:00–23:59），會把今天已發過的推播當成漏發而重發一次**；要清資料請避開這些時段。
 
 ## 五、待辦與觀察項（2026-08-06 現況）
 
@@ -64,6 +66,9 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 - **n8n 端 `tw_trends_news` 擴充**：熱搜 3→5、頭條 3→5（已擬好交辦 prompt，見第七節補記 17；bot 端不依賴條數，n8n 可獨立上線）。
 - **`!重載` 指令**：「吃什麼」清單目前要重啟才會重載。改用 Cogs 後成本已大幅降低——Cog 熱重載直接用 `bot.reload_extension()`，清單重載只需把 `EatWhatSystem._loaded` 歸位。
 - **ai_worker 壅塞觀察**：聊天 AI、影片摘要（最長 200 秒）、晚間話題共用 4 執行緒，極端情況會互相排隊。
+
+**已具備、等主人點名才動的基建**
+- **持久化已上線**（2026-08-17，見補記 29）：`tm_bot/storage/` 已有連線層與 repository 範式，之後要做需要記狀態的功能（簽到／積分、直播本場回顧、指令使用統計等）＝在 `storage/` 加一個 repository 即可，不必再碰連線與降級邏輯。**主人明確說過現階段不加新功能**，故僅備而不用。
 
 ## 六、測試與部署
 
@@ -144,6 +149,15 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
     - **測試 57 → 102**：新增設定層、**訊息路由守門規則**（12 個，鎖住各頻道該回應什麼）、**Cog 註冊**（6 個，指令名打錯會被抓到）、HTTP 錯誤轉譯、排程表（時間／頻道／星期）等。測試檔案改為鏡射 `tm_bot/` 結構，`sys.path` 手腳全數刪除。
     - **刻意放寬的三處微差**（皆為擴大、非縮小）：`!聽 abc`、`!心結 xxx` 這類帶多餘參數的指令現在也會正常執行（舊版需完全相符才觸發）；若試算表分類名與既有指令同名（如「抽」），現在只觸發指令、不會兩則都發；`_remind_message()`（固定文字提醒，原為註解狀態的死碼）刪除——同樣需求現在用一個 `ScheduledJob` 就能表達。
     - **評估後未做**：排程時間仍用 naive `datetime.now()`，依賴容器 `TZ=Asia/Taipei`（實測正確）。改成顯式 `ZoneInfo("Asia/Taipei")` 可免除對環境變數的依賴，但需為 Windows 本機加 `tzdata` 相依，價值不足暫緩。
+
+29. **（2026-08-17）持久化上線（Phase B）**：MongoDB Atlas（主人自有，免費 M0，與 Twitch Bot 同一個 Cluster0）。主人已建好專屬使用者 `tm_discord_bot`（權限僅 `readWrite @ tm_discord_bot`）並填妥 `.env`。
+    - **保護 `tm_twitch_bot` 的三道獨立防線**：① Atlas 帳號權限（已實測：對 `tm_twitch_bot` 的**唯讀嘗試被拒**，code 8000；`listDatabases` 只回傳授權範圍）；② `storage/mongo.py` 的 `FORBIDDEN_DB_NAMES` 黑名單，設定填錯直接拋 `ForbiddenDatabaseError` 讓機器人啟動失敗（刻意大聲，不靜默降級）；③ 資料庫名一律由 `MONGODB_DB` 明確指定，不從連線字串路徑段推斷。
+    - **驅動選 `pymongo`（同步）而非 motor**：本專案既有架構就是「阻塞呼叫丟執行緒池」，同步驅動一致且少一層心智負擔；排程對 Mongo 的呼叫走 `Scheduler._run_blocking()`，不凍結事件迴圈。
+    - **首個用例＝排程可靠度**（對頻決議：只做基建＋可靠度，**不做簽到/積分等新功能**）。`schedule_runs` 集合以 `_id = "任務:日期"` 當天然唯一鍵——不必建唯一索引，也沒有「先查再寫」的競態，衝突由資料庫判定。狀態機：認領 `running` →成功 `sent`；**失敗則刪除紀錄**（而非留失敗標記），所以「紀錄存在＝今天已完成或處理中」，查詢不必判斷狀態組合，同日補發也還有機會重試。`claimed_at` 上有 TTL 索引（180 天）。
+    - **fail-open / fail-closed 的分界**：一般推播在 Mongo 故障時**放行**（機器人的本分是把訊息發出去，寧可冒極低的重複風險）；唯獨**開機補發 fail-closed**（無法確認就不補，否則每次重啟都可能洗版）。`claim(..., fail_open=)` 明確表達這件事。
+    - **補發規則**：`ScheduledJob.catchup_hours` 放在排程表裡（早安 3、晚間話題 3、遊戲情報 2）。補發**不跨日**是自然結果而非額外判斷——過午夜後「今天的 target」落在未來，`now <= target` 就直接跳過。補發時傳給內容產生器的 `time_str` 改成**當下真實時間**，訊息不會宣稱自己是七點半發的。
+    - **驗證**（單元測試全是假物件，證明不了真實語意，故另做三層）：① 對真實 Atlas 跑完整 repository 流程 11 項全通過（`DuplicateKeyError`、`find_one_and_update` 條件寫入的行為與測試假設一致）；② 端對端跑真正的發送流程送訊息到測試頻道，第一次 `True`、第二次被紀錄擋下 `False`，紀錄 `status=sent`／`chars` 正確，事後清除；③ 部署後容器內 log 確認「MongoDB 已連線」。測試 102 → 139。
+    - **部署時機的坑（已寫入雷點 10）**：紀錄庫是空的時候，若在補發時窗內啟動，會把今天已發過的推播誤判為漏發而重發。本次刻意選在 11:48（三個時窗都不在範圍）部署。
 
 ## 八、開場動作建議
 

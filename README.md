@@ -3,7 +3,7 @@
 一隻為遊戲實況主「老虎喵喵喵（虎喵）」粉絲社群打造的 Discord 互動機器人。
 以「虎喵小粉絲」的人設與好虎粉互動，功能涵蓋 AI 聊天問答（含圖片/貼圖理解）、YouTube 影片快速摘要、每日早安招呼、每晚台灣熱門話題、每週五遊戲特惠情報、隨機點歌、吃什麼抽選、抽籤等。
 
-> 版本：`0.3.0`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜部署：Docker Compose
+> 版本：`0.4.0`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜儲存：MongoDB Atlas｜部署：Docker Compose
 
 **架構**：bot 本體只負責 Discord 連線、指令路由與輕量原生功能，重活外包給微服務——
 AI 能力（模型、人設、工具、對話記憶）在 n8n「TM AI Agent」工作流（多客戶端共用）；
@@ -57,19 +57,25 @@ AI 能力（模型、人設、工具、對話記憶）在 n8n「TM AI Agent」�
 - **每晚話題（19:30，與早安恰隔 12 小時）**：由 n8n AI Agent 呼叫 `tw_trends_news` 工具取得台灣 Google 熱搜與頭條，**濾除政治與悲劇社會案件**（優先挑娛樂/遊戲/動漫/科技/生活/體育類），以鄉民/活網仔口吻「劃重點」——一句話總結氛圍＋emoji 條列 2～4 個話題（無開場白與結尾），發送到閒聊頻道；使用獨立的 `night-trends` 記憶 session 讓連續幾晚的內容有變化；若過濾後無合適話題則自起輕鬆話題替代，來源故障時**間隔 60 秒重試一次**，仍失敗才當晚**靜默跳過**（不貼降級訊息）。
 - **週末遊戲情報（每週五 22:00）**：由 n8n AI Agent 呼叫 `game_deals` 工具取得 **Epic 本週免費遊戲**（附領取截止日）與 **Steam 特惠精選**（折扣 50% 以上或知名大作，3～5 款、台幣定價），以鄉民口吻整理發送到遊戲頻道（`game_deals_channel_id`），遊戲名附 **Markdown 商店連結**（`[名稱](<網址>)` 角括號格式抑制預覽卡片；工具未提供連結時自動只寫名稱）；使用獨立的 `game-deals` 記憶 session；來源故障時間隔 60 秒重試一次，仍失敗（或工具回報無資料）當週**靜默跳過**。
 
+**排程可靠度**（需設定 MongoDB，見下方「持久化」）：
+
+- **不重複發**：發送前先在 `schedule_runs` 認領「今天這一則」，認領不到就略過。斷線重連、容器重啟、甚至不小心同時跑起兩個實例，好虎粉都不會收到兩次早安。
+- **開機補發**：啟動時若發現今天的推播時刻已過卻沒有成功紀錄，就補發一次（早安補到 10:30、晚間話題補到 22:30、遊戲情報補到當天 23:59）。容器在 07:20 重開、08:00 才起來，早安不會整天消失；補發時訊息會如實顯示當下時間，不會宣稱自己是七點半發的。
+
 > 排程表定義在 `tm_bot/services/scheduler/jobs.py` 的 `build_jobs()`：一則推播就是一個
-> `ScheduledJob(標籤, 時間, 頻道, 內容產生函式, weekdays=…)`，要新增或調整推播只需動這張表。
-> 啟動時會在 log 印出實際生效的排程（`排程已啟動：早安 7:30、晚間話題 19:30、遊戲情報 22:00`）。
+> `ScheduledJob(標籤, 時間, 頻道, 內容產生函式, weekdays=…, catchup_hours=…)`，
+> 要新增或調整推播（含補發時窗）只需動這張表。
+> 啟動時會在 log 印出實際生效的排程（`排程已啟動：早安 7:30、晚間話題 19:30、遊戲情報 22:00（防重複與開機補發：啟用）`）。
 
 ---
 
 ## 🏗️ 架構分層
 
-程式碼依職責分成四層，**依賴方向單向**：
+程式碼依職責分層，**依賴方向單向**：
 
 ```
 cogs（指令與事件）→ services（領域邏輯）→ clients（外部系統）
-                  ↘ ui（Discord 呈現）
+                  ↘ ui（Discord 呈現）   ↘ storage（持久化）
 ```
 
 | 層 | 職責 | 規則 |
@@ -77,6 +83,7 @@ cogs（指令與事件）→ services（領域邏輯）→ clients（外部系�
 | `cogs/` | 收 Discord 訊息、呼叫服務、回覆 | 薄；不放商業邏輯 |
 | `services/` | 領域邏輯（抽籤、節日、排程、連結解析） | **完全不 import discord**，可純函式測試 |
 | `clients/` | 對外呼叫（n8n、yt-music-mcp、Google Sheets） | 只負責 I/O 與錯誤轉譯，不做業務判斷 |
+| `storage/` | 持久化（MongoDB） | 只有這裡認識 pymongo；上層拿到的是意圖明確的方法 |
 | `ui/` | Embed、訊息分段等呈現細節 | 不做 I/O |
 | `bot.py` | 唯一的組裝點與訊息路由 | 知道所有零件怎麼拼；其他模組彼此不必知道 |
 
@@ -125,6 +132,9 @@ tm_discord_bot/
     │   ├── yt_summary.py       #   n8n 影片摘要（TTL 6 小時快取）
     │   ├── yt_music.py         #   yt-music-mcp 歌單微服務
     │   └── google_sheets.py    #   pygsheets 授權
+    ├── storage/                # 持久化（MongoDB Atlas）
+    │   ├── mongo.py            #   連線、資料庫黑名單、連不上就降級
+    │   └── schedule_runs.py    #   排程執行紀錄（冪等與開機補發）
     └── ui/                     # Discord 呈現
         ├── embeds.py           #   摘要 Embed 與錯誤文案
         └── chunking.py         #   2000 字上限分段送出
@@ -148,6 +158,8 @@ tm_discord_bot/
 | `N8N_YT_SUMMARY_WEBHOOK_URL` | n8n「YouTube 影片快速摘要」webhook（與 AI Agent 共用 `N8N_WEBHOOK_SECRET`） |
 | `N8N_WEBHOOK_SECRET` | webhook Header Auth 共享密鑰（header 名稱 `X-Webhook-Secret`） |
 | `N8N_API_KEY` | n8n 管理 API 金鑰（開發輔助用，bot 執行期不需要） |
+| `MONGODB_URI` | **選填**。MongoDB Atlas 連線字串；未填則持久化停用（機器人其餘功能不受影響） |
+| `MONGODB_DB` | **選填**。資料庫名稱，一律明確指定、不從 URI 推斷。詳見下方「持久化」 |
 
 > `.env` 與 `secrets/` 已加入 `.gitignore` 與 `.dockerignore`，不進版控也不進映像；
 > Docker 部署由 `compose.yaml` 的 `env_file` 於**啟動時**注入容器。
@@ -197,6 +209,82 @@ docker compose up -d --build
 
 ---
 
+## 🗄️ 持久化（MongoDB Atlas）
+
+**選填功能**：沒設定時機器人完全正常運作，只是排程退化為不做防重複與開機補發。
+
+### 一、Atlas 端設定（只需做一次）
+
+| 步驟 | 位置 | 內容 |
+| --- | --- | --- |
+| 1 | Database Access | 建立**專屬**使用者，權限選 Specific Privileges → `readWrite` @ `tm_discord_bot`。**不要沿用其他專案的帳號** |
+| 2 | Network Access | 將執行機器的對外 IP 加入白名單（浮動 IP 要記得更新，否則會靜默連不上） |
+| 3 | 專案根 `.env` | 填入 `MONGODB_URI` 與 `MONGODB_DB=tm_discord_bot` |
+
+資料庫與集合**不需要事先建立**，第一次寫入時自動產生。連線字串請保留 Atlas 原本的格式
+（`.../mongodb.net/?retryWrites=...`，路徑段留空），authSource 才會走預設的 `admin`。
+
+> ⚠️ 同一個叢集裡的 `tm_twitch_bot` 屬於另一個專案，本專案**不得存取**。
+> 三道獨立防線：① Atlas 帳號權限只涵蓋本專案的資料庫；② `storage/mongo.py` 的
+> 資料庫名稱黑名單會讓設定填錯時直接啟動失敗；③ 資料庫名稱一律由 `MONGODB_DB` 明確指定。
+
+### 二、集合：`schedule_runs`
+
+排程推播的執行紀錄，**一天一則推播就是一筆**。`_id` 直接用「任務:日期」當天然唯一鍵，
+不必額外建唯一索引，也沒有「先查再寫」的競態——插入衝突由資料庫判定。
+
+```json
+{
+  "_id": "早安:2026-08-17",
+  "job": "早安",
+  "date": "2026-08-17",
+  "status": "sent",
+  "claimed_at": { "$date": "2026-08-16T23:30:01Z" },
+  "sent_at":    { "$date": "2026-08-16T23:30:12Z" },
+  "chars": 137
+}
+```
+
+| 欄位 | 說明 |
+| --- | --- |
+| `_id` | `任務標籤:當地日期`，冪等的依據 |
+| `status` | `running`＝已認領、內容產生中；`sent`＝發送完成 |
+| `claimed_at` / `sent_at` | UTC 時間（Atlas 慣例）；`claimed_at` 上有 TTL 索引，紀錄保留 180 天後自動清除 |
+| `chars` | 送出的字元數，用來回頭看那天的內容長度是否異常 |
+
+狀態流轉：認領 → `running` → 發送成功 → `sent`（此後同日不再發送）。
+若內容產不出來或發送失敗，紀錄會被**刪除**而非留下失敗標記——這樣同一天的開機補發還有機會重試。
+因此「紀錄存在」等同「今天這則已完成或正在處理」，查詢時不必再判斷狀態組合。
+
+### 三、常用查詢（mongosh 或 Compass）
+
+```javascript
+use tm_discord_bot
+
+// 最近 20 筆推播紀錄
+db.schedule_runs.find().sort({ claimed_at: -1 }).limit(20)
+
+// 某天到底發了哪幾則
+db.schedule_runs.find({ date: "2026-08-17" })
+
+// 卡在 running 的殘骸（正常情況只會短暫存在幾分鐘）
+db.schedule_runs.find({ status: "running" })
+
+// 讓某天的某則可以重發（刪掉紀錄即可，僅在補發時窗內有效）
+db.schedule_runs.deleteOne({ _id: "早安:2026-08-17" })
+```
+
+### 四、故障行為
+
+| 情境 | 行為 |
+| --- | --- |
+| 未設定 `MONGODB_URI`／`MONGODB_DB` | 持久化停用，排程照常推播（不防重複、不補發），啟動 log 會註明 |
+| `MONGODB_DB` 填成 `tm_twitch_bot` | **啟動即失敗**並印出原因，這是刻意的安全設計 |
+| Atlas 連不上（IP 未白名單、斷網、免費方案休眠） | 啟動只記錄警告，機器人照常上線；推播採 **fail-open**（寧可冒重複的風險也要把訊息發出去），唯獨開機補發採 fail-closed（無法確認就不補，免得每次重啟都洗版） |
+| 認領後容器被砍掉（紀錄卡在 `running`） | 15 分鐘後該紀錄可被接手，不會讓那天永遠發不出去 |
+
+---
+
 ## 🔧 技術棧
 
 | 類別 | 使用技術 |
@@ -206,7 +294,8 @@ docker compose up -d --build
 | 影片摘要 | n8n「YouTube 影片快速摘要」工作流：yt-music-mcp `/video`（時長/直播預檢）＋`/transcript`（CC 字幕）→ LLM 結構化輸出（重點大綱 2～4 點＋影片標籤）；無 CC 時二層備援：`/audio` 低碼率音訊→Gemini 轉錄摘要 → Gemini 直接看影片；bot 端僅為 HTTP 客戶端（`clients/yt_summary.py`，200 秒逾時＋TTL 6 小時快取＋同影片並發去重） |
 | 試算表 | `pygsheets` + GCP 服務帳戶 |
 | 歌單 | `yt-music-mcp` 微服務（MCP＋REST 雙介面）：載入、快取（TTL 6 小時）、跨歌單搜尋、隨機選歌全在伺服器端；bot 端僅為 HTTP 客戶端（`clients/yt_music.py`），不需 YouTube API Key |
-| 排程 | `asyncio` 常駐迴圈（睡到下一分鐘整點再檢查，避免固定間隔累積漂移而跳過整分鐘） |
+| 排程 | `asyncio` 常駐迴圈（睡到下一分鐘整點再檢查，避免固定間隔累積漂移而跳過整分鐘）＋以執行紀錄達成冪等與開機補發 |
+| 持久化 | `pymongo`（同步驅動，阻塞呼叫統一丟執行緒池）＋ MongoDB Atlas 免費方案；連不上自動降級，不影響機器人其他功能 |
 | 品質 | `ruff` lint＋format（規則釘在 `pyproject.toml`）、`unittest` 單元測試；GitHub Actions 每次 push／PR 全跑 |
 
 ---
