@@ -1,6 +1,6 @@
 import unittest
 
-from tm_bot.services.maps import extract_maps_url
+from tm_bot.services.maps import extract_maps_url, is_bare_link
 
 SHORT = "https://maps.app.goo.gl/AbCdEf123"
 PLACE = "https://www.google.com/maps/place/%E9%BC%8E%E6%B3%B0%E8%B1%90/@25.03,121.56,17z"
@@ -68,6 +68,36 @@ class TestExtractMapsUrl(unittest.TestCase):
 
     def test_lookalike_domain_is_rejected(self):
         self.assertIsNone(extract_maps_url("https://google.com.evil.example/maps/place/x"))
+
+
+class TestIsBareLink(unittest.TestCase):
+    """意圖分流：只貼連結＝要卡片，連結旁邊有話＝要對話（交給 AI Agent）。"""
+
+    def test_link_only(self):
+        self.assertTrue(is_bare_link(SHORT, SHORT))
+
+    def test_link_with_surrounding_whitespace(self):
+        self.assertTrue(is_bare_link(f"  {SHORT}\n", SHORT))
+
+    def test_angle_bracket_wrapped(self):
+        # 使用者用 <網址> 抑制預覽卡片，仍算只貼連結
+        self.assertTrue(is_bare_link(f"<{SHORT}>", SHORT))
+
+    def test_trailing_punctuation_only(self):
+        self.assertTrue(is_bare_link(f"{SHORT}。", SHORT))
+        self.assertTrue(is_bare_link(f"{SHORT}!!", SHORT))
+
+    def test_question_beside_link_is_not_bare(self):
+        self.assertFalse(is_bare_link(f"這家好吃嗎？{SHORT}", SHORT))
+
+    def test_any_words_make_it_conversational(self):
+        self.assertFalse(is_bare_link(f"{SHORT} 推", SHORT))
+        self.assertFalse(is_bare_link(f"明天去這家 {SHORT}", SHORT))
+
+    def test_two_links_are_not_bare(self):
+        # 只扣掉第一個連結，剩下那個網址算「有話」——交給 AI 處理比較保險
+        second = "https://maps.app.goo.gl/Second999"
+        self.assertFalse(is_bare_link(f"{SHORT} {second}", SHORT))
 
 
 if __name__ == "__main__":

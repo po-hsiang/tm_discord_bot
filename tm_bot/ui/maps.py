@@ -5,7 +5,7 @@
 
 ## 版型為什麼長這樣（2026-08-17 主人看過實際輸出後定案）
 
-一句話：**緊湊、只留有用的**。區塊之間單行不空行；不放地址（使用者本來就是貼連結來的，
+一句話：**只留有用的**。區塊之間空一行；不放地址（使用者本來就是貼連結來的，
 點標題就能導航）；不放一句話總評（資訊量低於底下的條列）。
 
 排序刻意是「可靠度遞減」：⭐ 評分（最可靠的彙總信號）→ 評論摘錄 → facts（結構化事實）
@@ -66,6 +66,11 @@ MAX_SOURCES = 4
 FACTS_YES_PREFIX = "✅"
 FACTS_NO_PREFIX = "❌"
 
+# 一行最多幾個標籤。n8n 端上限 18 且**排序即重要性**，所以裁掉的是
+# 「有沒有調酒」這種尾巴，裁很安全；但仍會補一個 … 表示有被裁，不做無聲截斷
+MAX_FACT_LABELS = 8
+TRUNCATION_HINT = "…"
+
 # 同一行內多個標籤的分隔符
 INLINE_SEPARATOR = " · "
 
@@ -104,20 +109,19 @@ def build_maps_embed(result):
 
 
 def _build_description(place, review, facts, sources):
-    # 區塊之間單行不空行；每個 helper 回傳空字串代表「這段沒東西可講」
-    lines = [
+    # 區塊之間空一行；每個 helper 回傳空字串代表「這段沒東西可講」，會被濾掉
+    blocks = [
         _headline(place, facts),
         _review_block("👍 **好評**", review.get("positive")),
         # 負評永遠有區塊，措辭限定在「這次摘到的評論」，不擴大成對這家店的斷言
         _review_block("👎 **負評**", review.get("negative"))
         or "👎 **負評**\n• 這次摘到的評論裡沒有出現負評",
-        _facts_line(FACTS_YES_PREFIX, facts.get("yes")),
-        _facts_line(FACTS_NO_PREFIX, facts.get("no")),
+        _facts_block(facts),
         _sample_note(place, review, sources),
         _sources_line(sources),
     ]
 
-    description = "\n".join(line for line in lines if line)
+    description = "\n\n".join(block for block in blocks if block)
     if len(description) > MAX_DESCRIPTION:
         return description[:MAX_DESCRIPTION] + "…\n*（內容過長，已截斷）*"
     return description
@@ -145,6 +149,15 @@ def _review_block(heading, items):
     return f"{heading}\n{bullets}" if bullets else ""
 
 
+def _facts_block(facts):
+    """✅／❌ 兩行併成一個區塊——它們是一對，中間不該被空行拆開。"""
+    lines = [
+        _facts_line(FACTS_YES_PREFIX, facts.get("yes")),
+        _facts_line(FACTS_NO_PREFIX, facts.get("no")),
+    ]
+    return "\n".join(line for line in lines if line)
+
+
 def _facts_line(prefix, labels):
     """把結構化事實壓成一行。
 
@@ -156,7 +169,12 @@ def _facts_line(prefix, labels):
     cleaned = [str(label).strip() for label in labels if str(label).strip()]
     if not cleaned:
         return ""
-    return f"{prefix} {INLINE_SEPARATOR.join(cleaned)}"
+
+    shown = cleaned[:MAX_FACT_LABELS]
+    line = f"{prefix} {INLINE_SEPARATOR.join(shown)}"
+    if len(cleaned) > len(shown):
+        line = f"{line}{INLINE_SEPARATOR}{TRUNCATION_HINT}"
+    return line
 
 
 def _sample_note(place, review, sources):

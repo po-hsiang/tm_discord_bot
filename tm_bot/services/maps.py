@@ -20,6 +20,13 @@ _TRAILING_PUNCTUATION = ".,;:、。，）)]】"
 _GOOGLE_HOST = re.compile(r"(?:www\.)?google\.[a-z.]{2,6}")
 
 
+# 判斷「訊息是不是只有連結」時可忽略的字元：空白、各種標點與括號。
+# 連結外層的 <>、句末的「。」、順手打的驚嘆號都不算「使用者說了話」
+_IGNORABLE_CHARS = frozenset(
+    " \t\r\n　​<>()[]{}（）〈〉「」『』【】。，、．,.!?！？~～-—_…:：;；\"'"
+)
+
+
 def extract_maps_url(text):
     """回傳文字中第一個 Google 地圖連結；沒有則回傳 None。"""
     for raw in _URL_PATTERN.findall(text or ""):
@@ -27,6 +34,21 @@ def extract_maps_url(text):
         if _is_maps_url(url):
             return url
     return None
+
+
+def is_bare_link(text, maps_url):
+    """訊息扣掉連結之後，只剩空白與標點嗎？
+
+    用來分流兩種意圖：
+    * 只貼連結        → 直接回評論摘要卡片（結構化、確定性、附得上來源）
+    * 連結旁邊有話    → 交給 AI Agent 對話（它手上也有 maps_review 工具）
+
+    規則刻意做成**確定性**的：不去猜那句話是不是問句。猜錯的代價是
+    使用者問了問題卻被回一張卡片（或反之），而且無法解釋為什麼。
+    現在的規則一句話就能講完——「只貼連結給你卡片，想聊就多寫一句」。
+    """
+    remainder = (text or "").replace(maps_url, "", 1)
+    return all(char in _IGNORABLE_CHARS for char in remainder)
 
 
 def _is_maps_url(url):

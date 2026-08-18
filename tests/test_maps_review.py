@@ -186,8 +186,21 @@ class TestRemovedSections(unittest.TestCase):
         self.assertNotIn("信義路二段", self.description)
         self.assertEqual(build_maps_embed(ok_body()).fields, [])
 
-    def test_no_blank_lines_between_blocks(self):
-        self.assertNotIn("\n\n", self.description)
+
+class TestBlockSpacing(unittest.TestCase):
+    def test_blocks_are_separated_by_a_blank_line(self):
+        description = build_maps_embed(ok_body()).description
+        self.assertIn("\n\n👍 **好評**", description)
+        self.assertIn("\n\n👎 **負評**", description)
+
+    def test_bullets_inside_a_block_stay_tight(self):
+        description = build_maps_embed(ok_body()).description
+        self.assertIn("👍 **好評**\n• 小籠包皮薄湯多\n• 服務細心", description)
+
+    def test_facts_pair_is_one_block(self):
+        # ✅ 與 ❌ 是一對，中間不該被空行拆開
+        description = build_maps_embed(ok_body()).description
+        self.assertIn("✅ 內用 · 外帶 · 只收現金\n❌ 外送 · 無障礙停車位", description)
 
 
 class TestFactsLines(unittest.TestCase):
@@ -210,6 +223,22 @@ class TestFactsLines(unittest.TestCase):
         description = build_maps_embed(ok_body(facts=facts)).description
         self.assertIn("✅ 內用", description)
         self.assertNotIn("外送", description)
+
+    def test_long_yes_list_is_capped_with_a_visible_hint(self):
+        # 晶華實測有 11 個標籤，手機上會佔三行；n8n 端排序即重要性，裁尾巴很安全
+        facts = {"yes": [f"項目{i}" for i in range(11)], "no": []}
+        line = next(
+            line
+            for line in build_maps_embed(ok_body(facts=facts)).description.splitlines()
+            if line.startswith("✅")
+        )
+        self.assertEqual(line.count("項目"), 8)
+        self.assertTrue(line.endswith("…"))  # 不做無聲截斷
+
+    def test_exactly_the_cap_shows_no_hint(self):
+        facts = {"yes": [f"項目{i}" for i in range(8)], "no": []}
+        description = build_maps_embed(ok_body(facts=facts)).description
+        self.assertNotIn("…", description)
 
     def test_price_level_alone_still_shows(self):
         place = {k: v for k, v in PLACE.items() if k not in ("rating", "rating_count")}

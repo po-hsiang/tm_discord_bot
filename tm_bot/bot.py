@@ -19,7 +19,7 @@ from tm_bot.clients.yt_music import SongPicker
 from tm_bot.clients.yt_summary import VideoSummaryClient
 from tm_bot.config import get_settings
 from tm_bot.services.eat import EatWhatSystem
-from tm_bot.services.maps import extract_maps_url
+from tm_bot.services.maps import extract_maps_url, is_bare_link
 from tm_bot.services.scheduler.jobs import build_jobs
 from tm_bot.services.scheduler.runner import Scheduler
 from tm_bot.services.youtube import extract_video_id
@@ -196,10 +196,12 @@ class TmBot(commands.Bot):
         if content.startswith(COMMAND_PREFIX):
             return ROUTE_COMMAND, None
 
-        # 3) Google Maps 評論摘要：放在指令之後，帶地圖連結的指令仍以指令優先
+        # 3) Google Maps 評論摘要：放在指令之後，帶地圖連結的指令仍以指令優先。
+        #    只貼連結＝要卡片走直連；連結旁邊有話＝要對話，交給 AI Agent
+        #    （n8n 端已把同一個工作流掛成 Agent 的 maps_review 工具）
         if self._is_maps_channel(channel_id):
             maps_url = extract_maps_url(content)
-            if maps_url is not None:
+            if maps_url is not None and is_bare_link(content, maps_url):
                 return ROUTE_MAPS, maps_url
 
         # 4) 其餘任何訊息（含純圖片／貼圖）一律視為自然語言

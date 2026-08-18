@@ -10,7 +10,9 @@ VIDEO = 555
 OUTSIDE = 999
 
 VIDEO_LINK = "這部超好笑 https://youtu.be/dQw4w9WgXcQ"
-MAPS_LINK = "這家不錯 https://maps.app.goo.gl/AbCdEf123"
+MAPS_URL = "https://maps.app.goo.gl/AbCdEf123"
+# 連結旁邊有話＝對話意圖，不是要卡片
+MAPS_LINK_WITH_WORDS = f"這家不錯 {MAPS_URL}"
 
 
 def route_of(bot, channel_id, content):
@@ -82,24 +84,26 @@ class TestClassify(unittest.TestCase):
 
     # --- Google Maps 評論摘要（試營運：只在測試頻道生效）---
 
-    def test_maps_link_in_test_channel(self):
-        route, maps_url = self.bot.classify(TEST, MAPS_LINK)
+    def test_bare_maps_link_goes_to_the_card(self):
+        route, maps_url = self.bot.classify(TEST, MAPS_URL)
         self.assertEqual(route, ROUTE_MAPS)
-        self.assertEqual(maps_url, "https://maps.app.goo.gl/AbCdEf123")
+        self.assertEqual(maps_url, MAPS_URL)
 
-    def test_maps_link_beats_ai_in_test_channel(self):
-        self.assertNotEqual(self.route(TEST, MAPS_LINK), ROUTE_AI)
+    def test_words_beside_maps_link_go_to_ai(self):
+        # 連結旁邊有話＝對話意圖；AI Agent 手上也有 maps_review 工具
+        self.assertEqual(self.route(TEST, MAPS_LINK_WITH_WORDS), ROUTE_AI)
+        self.assertEqual(self.route(TEST, f"這家好吃嗎？{MAPS_URL}"), ROUTE_AI)
 
     def test_command_with_maps_link_stays_a_command(self):
         # 指令優先：「!吃 <地圖連結>」不該被摘要功能攔走
-        self.assertEqual(self.route(TEST, f"!吃 {MAPS_LINK}"), ROUTE_COMMAND)
+        self.assertEqual(self.route(TEST, f"!吃 {MAPS_URL}"), ROUTE_COMMAND)
 
     def test_maps_link_in_assistant_channel_goes_to_ai(self):
         # 試營運階段助手頻道不啟用，維持原本的自然語言行為
-        self.assertEqual(self.route(ASSISTANT, MAPS_LINK), ROUTE_AI)
+        self.assertEqual(self.route(ASSISTANT, MAPS_URL), ROUTE_AI)
 
     def test_maps_link_in_video_channel_is_ignored(self):
-        self.assertEqual(self.route(VIDEO, MAPS_LINK), ROUTE_IGNORE)
+        self.assertEqual(self.route(VIDEO, MAPS_URL), ROUTE_IGNORE)
 
     # --- 其他頻道 ---
 
@@ -155,8 +159,8 @@ class TestClassifyWithoutMapsWebhook(unittest.TestCase):
     def tearDownClass(cls):
         shutdown(cls.bot)
 
-    def test_maps_link_falls_back_to_ai(self):
-        self.assertEqual(route_of(self.bot, TEST, MAPS_LINK), ROUTE_AI)
+    def test_bare_maps_link_falls_back_to_ai(self):
+        self.assertEqual(route_of(self.bot, TEST, MAPS_URL), ROUTE_AI)
 
 
 if __name__ == "__main__":
