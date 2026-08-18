@@ -197,48 +197,29 @@ class TestBlockSpacing(unittest.TestCase):
         description = build_maps_embed(ok_body()).description
         self.assertIn("👍 **好評**\n• 小籠包皮薄湯多\n• 服務細心", description)
 
-    def test_facts_pair_is_one_block(self):
-        # ✅ 與 ❌ 是一對，中間不該被空行拆開
+    def test_card_is_only_headline_reviews_note_and_sources(self):
+        # 可讀性優先：整張卡片就這五段，多一段都要是刻意的
+        blocks = build_maps_embed(ok_body()).description.split("\n\n")
+        self.assertEqual(len(blocks), 5)
+        self.assertTrue(blocks[0].startswith("⭐"))
+        self.assertTrue(blocks[1].startswith("👍"))
+        self.assertTrue(blocks[2].startswith("👎"))
+        self.assertTrue(blocks[3].startswith("⚠️"))
+        self.assertTrue(blocks[4].startswith("-# 🔗"))
+
+
+class TestFactsHandling(unittest.TestCase):
+    """`facts` 只取 price_level；yes／no 清單刻意不呈現（會把卡片撐長）。"""
+
+    def test_yes_and_no_lists_are_not_rendered(self):
         description = build_maps_embed(ok_body()).description
-        self.assertIn("✅ 內用 · 外帶 · 只收現金\n❌ 外送 · 無障礙停車位", description)
-
-
-class TestFactsLines(unittest.TestCase):
-    """facts 的鐵則：只印清單裡有的標籤，不從缺漏推論「沒有 XX」。"""
-
-    def test_yes_and_no_render_as_one_line_each(self):
-        description = build_maps_embed(ok_body()).description
-        self.assertIn("✅ 內用 · 外帶 · 只收現金", description)
-        self.assertIn("❌ 外送 · 無障礙停車位", description)
-
-    def test_empty_lists_render_nothing(self):
-        facts = {"yes": [], "no": [], "price_level": ""}
-        description = build_maps_embed(ok_body(facts=facts)).description
         self.assertNotIn("✅", description)
         self.assertNotIn("❌", description)
+        self.assertNotIn("只收現金", description)
+        self.assertNotIn("無障礙停車位", description)
 
-    def test_unlisted_attributes_are_never_claimed_absent(self):
-        # 「外送」不在任何清單裡＝Google 沒登錄，不可渲染成沒有外送
-        facts = {"yes": ["內用"], "no": []}
-        description = build_maps_embed(ok_body(facts=facts)).description
-        self.assertIn("✅ 內用", description)
-        self.assertNotIn("外送", description)
-
-    def test_long_yes_list_is_capped_with_a_visible_hint(self):
-        # 晶華實測有 11 個標籤，手機上會佔三行；n8n 端排序即重要性，裁尾巴很安全
-        facts = {"yes": [f"項目{i}" for i in range(11)], "no": []}
-        line = next(
-            line
-            for line in build_maps_embed(ok_body(facts=facts)).description.splitlines()
-            if line.startswith("✅")
-        )
-        self.assertEqual(line.count("項目"), 8)
-        self.assertTrue(line.endswith("…"))  # 不做無聲截斷
-
-    def test_exactly_the_cap_shows_no_hint(self):
-        facts = {"yes": [f"項目{i}" for i in range(8)], "no": []}
-        description = build_maps_embed(ok_body(facts=facts)).description
-        self.assertNotIn("…", description)
+    def test_price_level_joins_the_headline(self):
+        self.assertIn("💰 平價", build_maps_embed(ok_body()).description.splitlines()[0])
 
     def test_price_level_alone_still_shows(self):
         place = {k: v for k, v in PLACE.items() if k not in ("rating", "rating_count")}
@@ -250,26 +231,28 @@ class TestFactsLines(unittest.TestCase):
 
 
 class TestSourcesLine(unittest.TestCase):
-    """來源是 Google 對 grounded 內容的要求，壓成一行小字但不能移除。"""
+    """Google 的要求是**逐筆**連結，所以不能只放一個彙總連結、也不能移除；
+    能壓的只有連結文字，因此前綴用一個 🔗、評論改用序號。"""
 
-    def test_compact_single_line_with_short_labels(self):
-        description = build_maps_embed(ok_body()).description
-        last_line = description.splitlines()[-1]
-        self.assertTrue(last_line.startswith("-# 來源："))
+    def test_compact_line_with_emoji_prefix_and_numbered_reviews(self):
+        last_line = build_maps_embed(ok_body()).description.splitlines()[-1]
+        self.assertTrue(last_line.startswith("-# 🔗 "))
+        self.assertNotIn("來源：", last_line)
         # 角括號抑制 Discord 預覽卡片；網址一律原樣用 Google 給的
         self.assertIn("[地點](<https://maps.google.com/maps?cid=123>)", last_line)
-        self.assertIn(
-            "[評論1](<https://www.google.com/maps/reviews/data=!4m6!14m5!1m4>)", last_line
-        )
+        self.assertIn("[1](<https://www.google.com/maps/reviews/data=!4m6!14m5!1m4>)", last_line)
 
-    def test_sources_are_capped_to_one_short_line(self):
-        embed = build_maps_embed(ok_body(sources=review_sources(12)))
-        last_line = embed.description.splitlines()[-1]
-        self.assertEqual(last_line.count("[評論"), 4)
+    def test_every_source_still_gets_its_own_link(self):
+        # 合規重點：逐筆都連得過去，不是一個彙總連結
+        description = build_maps_embed(ok_body(sources=review_sources(3))).description
+        self.assertEqual(description.splitlines()[-1].count("](<"), 3)
+
+    def test_sources_are_capped_to_keep_the_line_short(self):
+        description = build_maps_embed(ok_body(sources=review_sources(12))).description
+        self.assertEqual(description.splitlines()[-1].count("](<"), 4)
 
     def test_no_sources_means_no_line(self):
-        description = build_maps_embed(ok_body(sources=[])).description
-        self.assertNotIn("來源：", description)
+        self.assertNotIn("🔗", build_maps_embed(ok_body(sources=[])).description)
 
 
 class TestNegativeSectionAlwaysShown(unittest.TestCase):
