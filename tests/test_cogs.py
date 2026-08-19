@@ -4,7 +4,6 @@ from tests.factories import make_settings
 from tm_bot.bot import (
     COG_AI_CHAT,
     COG_EAT,
-    COG_MAPS_REVIEW,
     COG_VIDEO_SUMMARY,
     EXTENSIONS,
     TmBot,
@@ -44,7 +43,7 @@ class TestCogRegistration(unittest.IsolatedAsyncioTestCase):
 
     async def test_router_cogs_are_reachable_by_name(self):
         # 路由以名稱查 Cog（熱重載後仍取得到最新實例），名稱錯了就會在執行期炸掉
-        for name in (COG_EAT, COG_AI_CHAT, COG_VIDEO_SUMMARY, COG_MAPS_REVIEW):
+        for name in (COG_EAT, COG_AI_CHAT, COG_VIDEO_SUMMARY):
             self.assertIsNotNone(self.bot.get_cog(name), f"找不到 Cog：{name}")
 
     async def test_builtin_help_command_is_disabled(self):

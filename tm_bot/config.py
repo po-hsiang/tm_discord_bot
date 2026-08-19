@@ -40,9 +40,6 @@ _OPTIONAL_STR_ENV = {
     # 只是退化為沒有防重複與開機補發（見 tm_bot/storage/）
     "mongodb_uri": "MONGODB_URI",
     "mongodb_db": "MONGODB_DB",
-    # Google Maps 評論摘要（試營運）：未設定則整個功能不啟用，
-    # 貼地圖連結的行為與設定前完全相同
-    "n8n_maps_review_webhook_url": "N8N_MAPS_REVIEW_WEBHOOK_URL",
 }
 
 # 選填設定：「欄位名 →（環境變數名, 預設值）」
@@ -50,8 +47,6 @@ _OPTIONAL_INT_ENV = {
     "n8n_agent_timeout": ("N8N_AGENT_TIMEOUT", 60),
     # 逾時階梯最上層：bot 200 > n8n 190 > yt-music-mcp 180（上游留封包餘裕）
     "n8n_yt_summary_timeout": ("N8N_YT_SUMMARY_TIMEOUT", 200),
-    # 網址解析 + Gemini grounding，比一般對話久但遠短於影片摘要
-    "n8n_maps_review_timeout": ("N8N_MAPS_REVIEW_TIMEOUT", 120),
 }
 
 # 非機敏設定來自 config/config.ini 的 [discord] 區段；Discord ID 為數字，未填則為 None
@@ -61,7 +56,6 @@ _CHANNEL_KEYS = (
     "chitchat_channel_id",
     "video_summary_channel_id",
     "game_deals_channel_id",
-    "maps_review_channel_id",
 )
 
 
@@ -76,7 +70,6 @@ class Settings:
     chitchat_channel_id: int | None
     video_summary_channel_id: int | None
     game_deals_channel_id: int | None
-    maps_review_channel_id: int | None
 
     # --- Google Sheets（吃什麼清單）---
     google_credential_file: str
@@ -91,9 +84,6 @@ class Settings:
     n8n_webhook_secret: str
     n8n_agent_timeout: int
     n8n_yt_summary_timeout: int
-    n8n_maps_review_timeout: int
-    # 選填：未設定則 Google Maps 評論摘要不啟用
-    n8n_maps_review_webhook_url: str
 
     # --- MongoDB Atlas（持久化）---
     # 選填：未設定則持久化停用，機器人其餘功能完全不受影響

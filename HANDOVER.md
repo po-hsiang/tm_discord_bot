@@ -2,7 +2,7 @@
 
 > **給主人的使用說明**：新開 session 時，請助理「先完整閱讀專案根目錄的 HANDOVER.md 再開始工作」即可。
 > **給接手助理的說明**：正文（一～六節）為**當前現況**，第七節為**歷史紀錄**（凍結不改，新變更往後追加編號）。
-> 正文最後更新：2026-08-17。功能與檔案結構的細節以 `README.md` 為準，本文件記錄 README 沒有的：協作共識、跨服務架構、環境雷點、待辦。
+> 正文最後更新：2026-08-19。功能與檔案結構的細節以 `README.md` 為準，本文件記錄 README 沒有的：協作共識、跨服務架構、環境雷點、待辦。
 
 ---
 
@@ -35,7 +35,6 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 | 持久化（連線、資料庫黑名單、排程執行紀錄） | `tm_bot/storage/`；集合結構與 mongosh 查詢範例見 README「🗄️ 持久化」一節 |
 | 新增一個 `!` 指令 | 於 `tm_bot/cogs/` 新增檔案，並加進 `bot.py` 的 `EXTENSIONS`（不需改既有檔案） |
 | 影片摘要的模型與提詞 | n8n「YouTube 影片快速摘要」工作流（id `t2OrIkAIr29Qws3S`；**存檔即生效**，不用動 bot） |
-| 地圖評論摘要的解析、grounding、摘要提詞 | n8n「maps-review」工作流（**主人的 n8n Agent 維護**；存檔即生效）。bot 端只認連結、驗契約、排版 |
 | 歌單載入/快取/搜尋、影片資訊/字幕/音訊端點 | `yt-music-mcp` 微服務（**另一專案的 Agent 維護**，這邊只提需求） |
 | 台灣熱搜／天氣／遊戲特惠來源（`tw_trends_news`／`tw_weather`／`game_deals` 工具） | n8n 端工具（主人與其 n8n Agent 另行維護） |
 | 頻道 ID 等非機敏設定 | `config/config.ini`（改完需重建部署） |
@@ -64,7 +63,7 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 - **舊 YouTube API Key**：曾明碼外露的那把 Key 已無任何服務使用，可在 GCP Console 直接刪除（主人自辦）。
 
 **待辦（依價值排序）**
-- **定期回探 Places API 的 `reviewSummary` 是否開放台灣／中文**（見第七節補記 31）：一開放就能把 Maps 評論摘要從「1 則摘錄」升級成「Google 官方跨全部評論的主題摘要」，改動只在 n8n 那層與 `ui/maps.py`。探法：對台灣地點的 Place Details field mask 加 `reviewSummary`，看欄位有沒有回。
+- **定期回探 Places API 的 `reviewSummary` 是否開放台灣／中文**——這是 **Google Maps 評論摘要解封的唯一條件**（該功能已於 2026-08-19 下架封存，見補記 35）。探法、計價、解封後的作法都寫在 **`docs/archive/maps-review.md`**，不必重新查證。
 - **n8n 端 `tw_trends_news` 擴充**：熱搜 3→5、頭條 3→5（已擬好交辦 prompt，見第七節補記 17；bot 端不依賴條數，n8n 可獨立上線）。
 - **`!重載` 指令**：「吃什麼」清單目前要重啟才會重載。改用 Cogs 後成本已大幅降低——Cog 熱重載直接用 `bot.reload_extension()`，清單重載只需把 `EatWhatSystem._loaded` 歸位。
 - **ai_worker 壅塞觀察**：聊天 AI、影片摘要（最長 200 秒）、晚間話題共用 4 執行緒，極端情況會互相排隊。
@@ -161,7 +160,11 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
     - **驗證**（單元測試全是假物件，證明不了真實語意，故另做三層）：① 對真實 Atlas 跑完整 repository 流程 11 項全通過（`DuplicateKeyError`、`find_one_and_update` 條件寫入的行為與測試假設一致）；② 端對端跑真正的發送流程送訊息到測試頻道，第一次 `True`、第二次被紀錄擋下 `False`，紀錄 `status=sent`／`chars` 正確，事後清除；③ 部署後容器內 log 確認「MongoDB 已連線」。測試 102 → 139。
     - **部署時機的坑（已寫入雷點 10）**：紀錄庫是空的時候，若在補發時窗內啟動，會把今天已發過的推播誤判為漏發而重發。本次刻意選在 11:48（三個時窗都不在範圍）部署。
 
-30. **（2026-08-17）Google Maps 評論摘要 bot 端串接（🧪 試營運）**。主人的原始構想是「Places API 拉近期評論 → LLM 濾工商 → 摘要好負評」，查證後**改走 Grounding 路線**，原因（皆有官方出處，見 README 技術棧與功能一覽）：
+30. **（2026-08-17）Google Maps 評論摘要 bot 端串接（🧪 試營運）**。
+    > 🗄️ **補記 30～34 描述的功能已於 2026-08-19 下架封存（見補記 35）。底下提到的檔案與設定在現行版本中都不存在了**，
+    > 這幾條保留為歷史紀錄。要看整理過的結論、還原方式與解封條件，請讀 `docs/archive/maps-review.md`。
+
+    主人的原始構想是「Places API 拉近期評論 → LLM 濾工商 → 摘要好負評」，查證後**改走 Grounding 路線**，原因（皆有官方出處，見 README 技術棧與功能一覽）：
     - **Places API 的 `reviews` 官方定義是「sorted by relevance. A maximum of 5 reviews can be returned.」** — 5 則硬上限、且新版 API 無任何評論排序參數（拿不到「近期」）。5 則濾掉工商後剩 3 則，「摘要」比直接貼原文還沒用，功能價值不成立。
     - **Grounding with Google Maps（Gemini API）** 的檢索在 Google 端完成，官方描述為「insights from millions of user reviews」，不受 5 則限制；另有 **Maps Grounding Lite 的 Resolution API** 官方支援 `maps.app.goo.gl` 短網址解析。成本也更低：grounding 每月 5,000 次免費、之後 $14／1,000；Places API 含 reviews 屬最貴 SKU（Enterprise + Atmosphere，月免費僅 1,000、之後 $25／1,000）。
     - **代價要記住**：「LLM 逐則濾工商假帳號」這一步**做不到也留不下來** — grounding 拿不到原始評論。只能在 n8n 端的 Prompt 要求模型對業配腔調保持懷疑，**無法驗證它實際濾了什麼**。回報給使用者時不要宣稱這是可驗證的過濾。
@@ -198,6 +201,15 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
     - **來源不能只留一個 🔗**——主人原本希望只留一個連結，查證後不行：官方要求是**逐筆**的（「Display the source name provided in the response」、「Link to the source using the `url`」），單一彙總連結不符合。**能壓的只有連結文字**，所以改成 `-# 🔗 地點 · 1 · 2 · 3`：前綴一個 emoji 取代「來源：」，評論改用序號（Google 給的標題是「Review of <店名> - Google Maps」，四筆一模一樣，照印純粹是噪音）。這是合規範圍內的最短形式，別再壓了。
     - 最終卡片＝**店名 → ⭐ 評分／評論數／💰 價位 → 👍 好評 → 👎 負評 →（樣本少時）⚠️ 提醒 → 🔗 來源**。`TestBlockSpacing.test_card_is_only_headline_reviews_note_and_sources` 會鎖住段數，之後多加一段就會紅。
     - 測試 210 → 208（移除 facts 呈現的測試比新增的多）。
+
+35. **（2026-08-19）Google Maps 評論摘要下架封存（v0.6.0）**。主人實測後判定「穩定性不高、多問多回應多擾民」，指示先下架、不掛在任何頻道，等 `reviewSummary` 支援台灣再議。
+    - **下架的是功能，不是判斷**。當初選 grounding 路線在文件上是對的（更便宜、支援短網址、條款明文允許）；錯的是相信「insights from millions of user reviews」會反映在**單次檢索量**上。實際約 1 則，比 Places API 硬給的 5 則還少。這條教訓比程式碼值錢，寫在 `docs/archive/maps-review.md` 第 2 節。
+    - **處理方式選「乾淨移除 ＋ 可追溯封存」，不是註解掉**。註解或留著不呼叫的程式碼沒人跑、測試不涵蓋、重構 `classify()` 或 `Settings` 時還得順手維護，而讀 code 的人會誤以為「功能存在只是關著」。死程式碼的家是版控。
+    - **但「反正有 git」只在未來找得到時才成立**，所以補三樣：① annotated tag **`archive/maps-review`** 釘住功能完整的最後一個 commit（`c83eb52`／v0.5.4），tag 訊息本身就寫了下架原因與解封條件；② **`docs/archive/maps-review.md`** 保住真正貴的部分——API 能力邊界、SKU 與計價、條款的逐筆來源標示要求、實測數據、n8n 契約、解封後該改哪兩層；③ 移除 commit 的訊息指向 tag，`git log --grep` 找得到。
+    - **移除範圍**：`services/maps.py`、`clients/maps_review.py`、`cogs/maps_review.py`、`ui/maps.py`、兩支測試檔，以及 `bot.py`／`config.py`／`config.ini`／`.env.example` 的 wiring 與設定（`ROUTE_MAPS`、`_is_maps_channel()`、`COG_MAPS_REVIEW`、`n8n_maps_review_*`、`maps_review_channel_id`）。測試 208 → 141。
+    - **`test_routing.py` 留了一條 `test_other_link_goes_to_ai`**：鎖住「只有 YouTube 連結有專屬路線，其餘連結就是普通訊息」。不是 maps 的殘留，是移除後該有的正向斷言。
+    - **⚠️ bot 端移除不等於完整下架**：n8n 的「maps-review」工作流當時掛著兩個入口，另一個是 **TM AI Agent 的 `maps_review` 工具**。使用者在助手頻道問「這家好吃嗎？<地圖連結>」仍會走到它，且那正是「多問→多回應」的路徑。**必須在 n8n 端把該工具停用或移除**（主人自辦，bot 端管不到）。
+    - `.env` 裡殘留的 `N8N_MAPS_REVIEW_WEBHOOK_URL` 已成為無人讀取的死鍵（`config.py` 不再讀它），留著無害；要清乾淨就直接刪那兩行。
 
 ## 八、開場動作建議
 

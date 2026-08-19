@@ -3,7 +3,7 @@
 一隻為遊戲實況主「老虎喵喵喵（虎喵）」粉絲社群打造的 Discord 互動機器人。
 以「虎喵小粉絲」的人設與好虎粉互動，功能涵蓋 AI 聊天問答（含圖片/貼圖理解）、YouTube 影片快速摘要、每日早安招呼、每晚台灣熱門話題、每週五遊戲特惠情報、隨機點歌、吃什麼抽選、抽籤等。
 
-> 版本：`0.5.4`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜儲存：MongoDB Atlas｜部署：Docker Compose
+> 版本：`0.6.0`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜儲存：MongoDB Atlas｜部署：Docker Compose
 
 **架構**：bot 本體只負責 Discord 連線、指令路由與輕量原生功能，重活外包給微服務——
 AI 能力（模型、人設、工具、對話記憶）在 n8n「TM AI Agent」工作流（多客戶端共用）；
@@ -50,27 +50,6 @@ AI 能力（模型、人設、工具、對話記憶）在 n8n「TM AI Agent」�
 > 流程：bot → n8n「YouTube 影片快速摘要」工作流 → yt-music-mcp（影片資訊＋CC 字幕）→ LLM 結構化輸出。
 > 字幕來源三層遞補：**CC 字幕**（人工優先、自動生成次之）→ 無 CC 時改抓**低碼率音訊**（yt-music-mcp `/audio`，yt-dlp）交給 Gemini 轉錄＋摘要 → 音訊層技術性失敗時最後由 **Gemini 直接看影片**（YouTube URL）。
 > 回應附 `source` 欄位（transcript/audio/video）標示摘要來源。
-
-### 🗺️ Google Maps 評論摘要（🧪 試營運，免指令）
-
-在測試頻道（或填了 `maps_review_channel_id` 的頻道）**貼上 Google 地圖連結即觸發**：
-
-1. 機器人以 ⏳ reaction 表示處理中。
-2. 完成後回覆 Embed（區塊之間空一行）：店名（點擊即導航）→ **⭐ 評分／評論總數／💰 價位**（最可靠的彙總信號擺第一行）→ 👍 好評／👎 負評條列 →（樣本偏少時）**樣本大小提醒** → 一行 `🔗` 小字來源 → 頁尾歸屬。**可讀性優先**，刻意不放：地址（貼連結的人點標題就能導航）、一句話總評（資訊量低於條列）、`facts` 的 ✅／❌ 屬性清單（標籤太多會蓋掉真正要看的評分與評論；`price_level` 仍併進第一行）。
-3. 支援 `maps.app.goo.gl` 分享短網址、`google.com/maps/place/…`、`maps.google.com/…` 與各地區網域（如 `google.com.tw`）。
-4. **意圖分流**：訊息**只有連結**（扣掉連結只剩空白與標點）→ 直接回卡片；連結**旁邊有話**（如「這家好吃嗎？」）→ 交給 AI Agent 對話，由它自行決定要不要呼叫 `maps_review` 工具。規則刻意是確定性的，不去猜那句話是不是問句——使用者只要記「只貼連結給卡片，想聊就多寫一句」。
-5. 帶地圖連結的**指令仍以指令優先**（`!吃 <連結>` 不會被摘要攔走）。
-6. 同一連結同時被多人貼上只發一次請求；**刻意不做快取**（見下）。
-
-> 流程：bot → n8n「maps-review」工作流 →〔Maps Grounding Lite 解析短網址 → Gemini 以 `google_maps` 工具 grounding〕→ 結構化結果。
->
-> **⚠️ 這個功能的能力邊界（2026-08-17 實測，看數字再期待）**：Maps grounding 每次只撈到**一則左右**的評論——一家 649 則評論的店只回 1 則，2,933 則的店約 1/3 機率整個失敗（n8n 端已加重試）。Google 自己那套跨全部評論的 `reviewSummary` 欄位**台灣與中文都還不在支援範圍**（僅英／日／葡／西語的特定國家）。因此版型刻意做成「誠實版」：**評分掛帥**（真正可靠的只有評分與評論數）、**樣本大小由程式計算後明講**（模型曾只拿到一則評論卻回空的提醒，自我察覺不可靠）、**負評區塊永遠顯示**（0 筆時明講「這次摘到的評論裡沒有出現負評」，而不是宣稱這家店沒負評）。
->
-> **`facts` 若要加回 ✅／❌ 呈現，記住鐵則**：`yes`＝確定有、`no`＝確定沒有、**沒被列到＝Google 沒登錄資料**。Places API 對不知道的屬性是整個欄位不回傳，所以「沒出現」不等於「沒有」——只能渲染清單裡實際有的標籤，永不從缺漏推論。
->
-> **兩個設計上的硬性限制**：① Maps Platform 條款禁止 pre-fetch／cache／store Places 內容（僅 place ID 例外），grounded 輸出的快取規則官方未交代，因此**不留任何快取**；② grounded 內容必須標示 Google Maps 來源、一次互動內可見，而且是**逐筆**的（官方：「Display the source name provided in the response」、「Link to the source using the `url`」）——**單一彙總連結不符合要求**，故那行 `🔗` 不能砍成一個連結也不能移除（能壓的只有連結文字：前綴用一個 emoji、評論標序號），且 bot 端把「沒有 sources」視為失敗（`MISSING_SOURCES`）。
->
-> 未設定 `N8N_MAPS_REVIEW_WEBHOOK_URL` 時整個功能不啟用，貼地圖連結的行為與設定前完全相同。
 
 ### ⏰ 排程功能
 
@@ -124,6 +103,9 @@ tm_discord_bot/
 ├── .python-version             # 釘住 Python 3.14（uv 自動下載選用）
 ├── config/
 │   └── config.ini              # 非機敏設定：各頻道 ID（入版控）
+├── docs/
+│   └── archive/                # 已下架功能的封存紀錄（查證結果、契約、解封條件）
+│       └── maps-review.md      #   Google Maps 評論摘要（tag: archive/maps-review）
 ├── secrets/                    # ⚠️ 不入版控、不進映像（以唯讀 volume 掛載）
 │   └── <service_account>.json  # Google 服務帳戶憑證（pygsheets 用）
 ├── tests/                      # 單元測試（目錄結構鏡射 tm_bot/）
@@ -137,14 +119,12 @@ tm_discord_bot/
     │   ├── song.py             #   !聽、!查歌單
     │   ├── eat.py              #   !吃、!吃啥、!<分類名>（動態指令）
     │   ├── ai_chat.py          #   自然語言 → AI
-    │   ├── video_summary.py    #   影片連結 → 摘要（含同影片並發去重）
-    │   └── maps_review.py      #   地圖連結 → 評論摘要（試營運）
+    │   └── video_summary.py    #   影片連結 → 摘要（含同影片並發去重）
     ├── services/               # 領域邏輯（不 import discord）
     │   ├── draw.py             #   加權抽籤 + 保底
     │   ├── eat.py              #   Google Sheets 吃什麼清單
     │   ├── holiday.py          #   節日/補假/農曆節日/節氣（holidays＋cnlunar 離線計算）
     │   ├── youtube.py          #   YouTube 連結解析
-    │   ├── maps.py             #   Google 地圖連結辨識
     │   └── scheduler/
     │       ├── runner.py       #     排程引擎：什麼時候跑
     │       ├── jobs.py         #     排程表與內容產生：跑什麼
@@ -153,7 +133,6 @@ tm_discord_bot/
     │   ├── http.py             #   n8n webhook 共用 POST（Header Auth、逾時、錯誤轉譯）
     │   ├── ai_agent.py         #   n8n AI Agent
     │   ├── yt_summary.py       #   n8n 影片摘要（TTL 6 小時快取）
-    │   ├── maps_review.py      #   n8n 地圖評論摘要（依條款刻意不快取）
     │   ├── yt_music.py         #   yt-music-mcp 歌單微服務
     │   └── google_sheets.py    #   pygsheets 授權
     ├── storage/                # 持久化（MongoDB Atlas）
@@ -161,7 +140,6 @@ tm_discord_bot/
     │   └── schedule_runs.py    #   排程執行紀錄（冪等與開機補發）
     └── ui/                     # Discord 呈現
         ├── embeds.py           #   影片摘要 Embed 與錯誤文案
-        ├── maps.py             #   地圖評論摘要 Embed 與錯誤文案
         └── chunking.py         #   2000 字上限分段送出
 ```
 
@@ -183,7 +161,6 @@ tm_discord_bot/
 | `N8N_YT_SUMMARY_WEBHOOK_URL` | n8n「YouTube 影片快速摘要」webhook（與 AI Agent 共用 `N8N_WEBHOOK_SECRET`） |
 | `N8N_WEBHOOK_SECRET` | webhook Header Auth 共享密鑰（header 名稱 `X-Webhook-Secret`） |
 | `N8N_API_KEY` | n8n 管理 API 金鑰（開發輔助用，bot 執行期不需要） |
-| `N8N_MAPS_REVIEW_WEBHOOK_URL` | **選填**。n8n「maps-review」webhook；未填則 Google Maps 評論摘要不啟用 |
 | `MONGODB_URI` | **選填**。MongoDB Atlas 連線字串；未填則持久化停用（機器人其餘功能不受影響） |
 | `MONGODB_DB` | **選填**。資料庫名稱，一律明確指定、不從 URI 推斷。詳見下方「持久化」 |
 
@@ -198,11 +175,10 @@ tm_discord_bot/
 ```ini
 [discord]
 assistant_channel_id = 助手頻道 ID（指令＋自然語言 AI 對話）
-test_channel_id = 測試頻道 ID（同上，貼影片或地圖連結也會觸發摘要）
+test_channel_id = 測試頻道 ID（同上，貼影片連結也會觸發摘要）
 chitchat_channel_id = 早安與晚間話題頻道 ID
 video_summary_channel_id = 影片快速摘要專屬頻道 ID（留空則僅測試頻道生效）
 game_deals_channel_id = 週五遊戲特惠情報頻道 ID
-maps_review_channel_id = 地圖評論摘要頻道 ID（試營運，留空則僅測試頻道生效）
 ```
 
 > 修改 `config.ini` 後需重新部署（`docker compose up -d --build`）才會生效。
@@ -319,7 +295,6 @@ db.schedule_runs.deleteOne({ _id: "早安:2026-08-17" })
 | Discord | `discord` (discord.py) 2.3+，`commands.Bot` ＋ Cogs；`setup_hook` 掛載擴充與啟動排程、`on_message` 統一路由 |
 | AI 對話 | n8n「TM AI Agent」工作流（Webhook 微服務，多客戶端共用）：Gemini 模型＋人設＋工具（搜尋/Wikipedia/計算機/QuickChart/YTMusic MCP/台灣熱搜新聞/台灣天氣/遊戲特惠）＋按頻道的對話記憶；bot 端僅為 HTTP 客戶端（`clients/ai_agent.py`，Header Auth＋逾時預設 60 秒、呼叫端可覆寫（晚間話題 120 秒）＋降級訊息） |
 | 影片摘要 | n8n「YouTube 影片快速摘要」工作流：yt-music-mcp `/video`（時長/直播預檢）＋`/transcript`（CC 字幕）→ LLM 結構化輸出（重點大綱 2～4 點＋影片標籤）；無 CC 時二層備援：`/audio` 低碼率音訊→Gemini 轉錄摘要 → Gemini 直接看影片；bot 端僅為 HTTP 客戶端（`clients/yt_summary.py`，200 秒逾時＋TTL 6 小時快取＋同影片並發去重） |
-| 地圖評論 | n8n「maps-review」工作流：Maps Grounding Lite 的 Resolution API 解析分享短網址 → Gemini 以 `google_maps` 工具 grounding（評論洞察不受 Places API「最多 5 則」限制）；bot 端僅為 HTTP 客戶端（`clients/maps_review.py`，依 Maps 條款**不快取**、強制要求回應附來源連結） |
 | 試算表 | `pygsheets` + GCP 服務帳戶 |
 | 歌單 | `yt-music-mcp` 微服務（MCP＋REST 雙介面）：載入、快取（TTL 6 小時）、跨歌單搜尋、隨機選歌全在伺服器端；bot 端僅為 HTTP 客戶端（`clients/yt_music.py`），不需 YouTube API Key |
 | 排程 | `asyncio` 常駐迴圈（睡到下一分鐘整點再檢查，避免固定間隔累積漂移而跳過整分鐘）＋以執行紀錄達成冪等與開機補發 |
