@@ -102,8 +102,10 @@ class TestNightTrends(unittest.TestCase):
         self.assertIn("tw_trends_news", question)
         self.assertIn("排除政治", question)
         self.assertIn("刑事與悲劇案件", question)
-        # 這是遊戲實況社群，話題優先序不可被改掉（2026-08-20 主人定案）
-        self.assertIn("遊戲與二次元最優先", question)
+        # 這是遊戲實況社群，ACG／Steam 優先於一般熱搜（2026-08-20 主人定案）；
+        # 分流靠 n8n 回的 category 欄位，改名或拿掉都會讓優先序失效
+        self.assertIn("category", question)
+        self.assertIn("acg 或 steam 的最優先", question)
         self.assertIn("星期一", question)
 
     def test_first_failure_retries_once_and_posts_retry_answer(self):
