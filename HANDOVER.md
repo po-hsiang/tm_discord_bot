@@ -37,6 +37,7 @@ bot 本體只管 Discord 連線與路由，重活在三個外部服務。改錯�
 | 影片摘要的模型與提詞 | n8n「YouTube 影片快速摘要」工作流（id `t2OrIkAIr29Qws3S`；**存檔即生效**，不用動 bot） |
 | 歌單載入/快取/搜尋、影片資訊/字幕/音訊端點 | `yt-music-mcp` 微服務（**另一專案的 Agent 維護**，這邊只提需求） |
 | 台灣熱搜／天氣／遊戲特惠來源（`tw_trends_news`／`tw_weather`／`game_deals` 工具） | n8n 端工具（主人與其 n8n Agent 另行維護） |
+| 遊戲情報要帶哪些 Steam 資料（評價、發行日、線上人數…） | n8n 的 `game_deals` 工具；**開發規格見 `docs/n8n-game-deals-spec.md`**（含端點、降級規則、實測踩到的坑） |
 | 頻道 ID 等非機敏設定 | `config/config.ini`（改完需重建部署） |
 | 機敏鍵（token/密鑰/URL） | `.env`（改完 `docker compose up -d` 重建容器即可，不必 --build） |
 

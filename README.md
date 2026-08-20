@@ -104,6 +104,7 @@ tm_discord_bot/
 ├── config/
 │   └── config.ini              # 非機敏設定：各頻道 ID（入版控）
 ├── docs/
+│   ├── n8n-game-deals-spec.md  # n8n game_deals 工具的 Steam 資料開發規格（跨服務契約）
 │   └── archive/                # 已下架功能的封存紀錄（查證結果、契約、解封條件）
 │       └── maps-review.md      #   Google Maps 評論摘要（tag: archive/maps-review）
 ├── secrets/                    # ⚠️ 不入版控、不進映像（以唯讀 volume 掛載）
