@@ -46,7 +46,7 @@ class TestClassify(unittest.TestCase):
     # --- 助手頻道 ---
 
     def test_command_in_assistant_channel(self):
-        self.assertEqual(self.route(ASSISTANT, "!抽"), ROUTE_COMMAND)
+        self.assertEqual(self.route(ASSISTANT, "!聽"), ROUTE_COMMAND)
 
     def test_plain_text_in_assistant_channel_goes_to_ai(self):
         self.assertEqual(self.route(ASSISTANT, "今天天氣如何"), ROUTE_AI)
@@ -67,7 +67,7 @@ class TestClassify(unittest.TestCase):
         self.assertEqual(self.route(VIDEO, "大家好"), ROUTE_IGNORE)
 
     def test_command_in_dedicated_channel_is_ignored(self):
-        self.assertEqual(self.route(VIDEO, "!抽"), ROUTE_IGNORE)
+        self.assertEqual(self.route(VIDEO, "!聽"), ROUTE_IGNORE)
 
     # --- 測試頻道（兩種功能都吃）---
 
@@ -95,7 +95,7 @@ class TestClassify(unittest.TestCase):
 
     def test_chitchat_channel_is_ignored(self):
         # 閒聊頻道只收排程推播，不回應使用者訊息
-        self.assertEqual(self.route(CHITCHAT, "!抽"), ROUTE_IGNORE)
+        self.assertEqual(self.route(CHITCHAT, "!聽"), ROUTE_IGNORE)
         self.assertEqual(self.route(CHITCHAT, "安安"), ROUTE_IGNORE)
 
     def test_unknown_channel_is_ignored(self):

@@ -1,9 +1,9 @@
 # tm_discord_bot — 虎喵小粉絲 Discord Bot 🐯
 
 一隻為遊戲實況主「老虎喵喵喵（虎喵）」粉絲社群打造的 Discord 互動機器人。
-以「虎喵小粉絲」的人設與好虎粉互動，功能涵蓋 AI 聊天問答（含圖片/貼圖理解）、YouTube 影片快速摘要、每日早安招呼、每晚台灣熱門話題、每週五遊戲特惠情報、隨機點歌、吃什麼抽選、抽籤等。
+以「虎喵小粉絲」的人設與好虎粉互動，功能涵蓋 AI 聊天問答（含圖片/貼圖理解）、YouTube 影片快速摘要、每日早安招呼、每晚台灣熱門話題、每週五遊戲特惠情報、隨機點歌、吃什麼抽選等。
 
-> 版本：`0.7.0`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜儲存：MongoDB Atlas｜部署：Docker Compose
+> 版本：`0.8.0`｜語言：Python 3.14｜套件管理：uv｜AI：n8n AI Agent 微服務｜儲存：MongoDB Atlas｜部署：Docker Compose
 
 **架構**：bot 本體只負責 Discord 連線、指令路由與輕量原生功能，重活外包給微服務——
 AI 能力（模型、人設、工具、對話記憶）在 n8n「TM AI Agent」工作流（多客戶端共用）；
@@ -29,13 +29,9 @@ AI 能力（模型、人設、工具、對話記憶）在 n8n「TM AI Agent」�
 | 指令 | 說明 | 資料來源 |
 | --- | --- | --- |
 | （自然語言，免指令） | 以「虎喵小粉絲」人設對話；支援附圖或貼圖（Gemini 視覺分析）、可查即時資訊（搜尋等工具） | n8n AI Agent 微服務 |
-| `!抽` | 抽 10 支籤（黑 / 黃 / 彩虹，權重 94.3 / 5.1 / 0.6，含保底機制：10 抽必有黃籤以上） | 內建 |
 | `!吃`、`!吃啥`、`!<分類名>` | 從 Google 試算表隨機抽一個「今天吃什麼」，可指定分類 | Google Sheets |
 | `!聽`、`!歌`、`!聽歌`、`!listen`、`!song` | 從虎喵的 YouTube 歌單隨機推薦一首歌 | yt-music-mcp 微服務 |
 | `!查歌單 <關鍵字>` | 跨**全部歌單**搜尋標題或頻道名稱含關鍵字的歌曲（標示所屬歌單、自動分段避開 Discord 2000 字上限） | yt-music-mcp 微服務 |
-| `!心結` | 彩蛋固定回覆 | 內建 |
-
-> 舊的 `!問`／`!gpt` 已退役——直接說話即可；打了也會收到轉換提示。
 
 ### 📺 YouTube 影片快速摘要（專屬頻道，免指令）
 
@@ -81,7 +77,7 @@ cogs（指令與事件）→ services（領域邏輯）→ clients（外部系�
 | 層 | 職責 | 規則 |
 | --- | --- | --- |
 | `cogs/` | 收 Discord 訊息、呼叫服務、回覆 | 薄；不放商業邏輯 |
-| `services/` | 領域邏輯（抽籤、節日、排程、連結解析） | **完全不 import discord**，可純函式測試 |
+| `services/` | 領域邏輯（節日、排程、連結解析） | **完全不 import discord**，可純函式測試 |
 | `clients/` | 對外呼叫（n8n、yt-music-mcp、Google Sheets） | 只負責 I/O 與錯誤轉譯，不做業務判斷 |
 | `storage/` | 持久化（MongoDB） | 只有這裡認識 pymongo；上層拿到的是意圖明確的方法 |
 | `ui/` | Embed、訊息分段等呈現細節 | 不做 I/O |
@@ -114,14 +110,11 @@ tm_discord_bot/
     ├── bot.py                  # 組裝點：建客戶端、掛 Cog、啟動排程、訊息路由
     ├── config.py               # 設定：.env（機敏）＋ config.ini（非機敏）→ Settings 物件
     ├── cogs/                   # 指令與事件（一個功能一個檔，可熱重載）
-    │   ├── misc.py             #   !心結、已退役指令提示
-    │   ├── draw.py             #   !抽
     │   ├── song.py             #   !聽、!查歌單
     │   ├── eat.py              #   !吃、!吃啥、!<分類名>（動態指令）
     │   ├── ai_chat.py          #   自然語言 → AI
     │   └── video_summary.py    #   影片連結 → 摘要（含同影片並發去重）
     ├── services/               # 領域邏輯（不 import discord）
-    │   ├── draw.py             #   加權抽籤 + 保底
     │   ├── eat.py              #   Google Sheets 吃什麼清單
     │   ├── holiday.py          #   節日/補假/農曆節日/節氣（holidays＋cnlunar 離線計算）
     │   ├── youtube.py          #   YouTube 連結解析

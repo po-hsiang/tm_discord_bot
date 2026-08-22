@@ -16,7 +16,7 @@ class TestInsertMissingSpace(unittest.TestCase):
         self.assertEqual(insert_missing_space("!查歌單"), "!查歌單")
 
     def test_other_commands_are_unchanged(self):
-        self.assertEqual(insert_missing_space("!抽"), "!抽")
+        self.assertEqual(insert_missing_space("!聽"), "!聽")
         self.assertEqual(insert_missing_space("!聽歌"), "!聽歌")
 
     def test_plain_message_is_unchanged(self):

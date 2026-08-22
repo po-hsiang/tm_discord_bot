@@ -10,7 +10,7 @@ from tm_bot.bot import (
 )
 
 # 使用者實際會打的指令；改動這份清單等同改動對外行為
-EXPECTED_COMMANDS = {"心結", "問", "抽", "聽", "查歌單"}
+EXPECTED_COMMANDS = {"聽", "查歌單"}
 SONG_ALIASES = ("歌", "聽歌", "listen", "song")
 
 
@@ -37,9 +37,6 @@ class TestCogRegistration(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(listen)
         for alias in SONG_ALIASES:
             self.assertIs(self.bot.get_command(alias), listen)
-
-    async def test_retired_ai_command_alias(self):
-        self.assertIs(self.bot.get_command("gpt"), self.bot.get_command("問"))
 
     async def test_router_cogs_are_reachable_by_name(self):
         # 路由以名稱查 Cog（熱重載後仍取得到最新實例），名稱錯了就會在執行期炸掉

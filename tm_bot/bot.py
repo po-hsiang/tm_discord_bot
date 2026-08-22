@@ -31,8 +31,6 @@ COMMAND_PREFIX = "!"
 # 掛載的 Cog（一個功能一個模組）。以 load_extension 載入而非直接 add_cog，
 # 日後才能用 reload_extension 熱重載，不必重開容器
 EXTENSIONS = (
-    "tm_bot.cogs.misc",
-    "tm_bot.cogs.draw",
     "tm_bot.cogs.song",
     "tm_bot.cogs.eat",
     "tm_bot.cogs.ai_chat",
