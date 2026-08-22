@@ -5,6 +5,7 @@
 """
 
 import logging
+import re
 import time
 
 from tm_bot.clients.ai_agent import API_FAIL_MESSAGE
@@ -19,6 +20,42 @@ NIGHT_TRENDS_TIMEOUT = 120
 GAME_DEALS_TIMEOUT = 120
 # 首次失敗後的重試間隔：留給 n8n／LLM 足夠的緩衝喘息，不急著連打
 AI_RETRY_DELAY = 60
+
+# 平台標籤：「網域 → 標籤」。刻意由程式判斷而非請 AI 標記——
+# 平台是從連結網域就能確定的事實，交給模型只是多一個會出錯的地方
+PLATFORM_TAGS = (
+    ("steampowered.com", "【Steam】"),
+    ("epicgames.com", "【Epic】"),
+)
+
+# 抓行內第一個 Markdown 連結的網址（角括號可有可無）
+_MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(<?(?P<url>https?://[^\s)>]+?)>?\)")
+
+
+def tag_platforms(text):
+    """在每一行遊戲的最前面補上【Steam】／【Epic】標籤。
+
+    判斷依據是該行 Markdown 連結的網域。認不出平台的行（開場總結那句、
+    或工具沒給連結而只寫了名稱的遊戲）原樣保留——寧可少一個標籤，
+    也不要猜錯平台。
+    """
+    if not text:
+        return text
+    tagged = []
+    for line in text.splitlines():
+        match = _MARKDOWN_LINK.search(line)
+        tag = _platform_tag(match.group("url")) if match else None
+        tagged.append(f"{tag} {line}" if tag else line)
+    return "\n".join(tagged)
+
+
+def _platform_tag(url):
+    host = url.split("/")[2].lower() if "://" in url else ""
+    for domain, tag in PLATFORM_TAGS:
+        # 比對到網域邊界，evilsteampowered.com 這種山寨網域不會誤判成 Steam
+        if host == domain or host.endswith(f".{domain}"):
+            return tag
+    return None
 
 
 class ScheduledMessages:
@@ -54,11 +91,13 @@ class ScheduledMessages:
         answer = self._ask_with_retry(
             prompts.game_deals(), "game-deals", GAME_DEALS_TIMEOUT, "遊戲情報"
         )
-        if answer is not None and prompts.GAME_DEALS_SENTINEL in answer:
+        if answer is None:
+            return None
+        if prompts.GAME_DEALS_SENTINEL in answer:
             # 工具雙來源皆故障：AI 依指示原樣回覆哨兵字串，本週靜默跳過
             logger.warning("遊戲情報來源故障（哨兵字串），本週靜默跳過")
             return None
-        return answer
+        return tag_platforms(answer)
 
     @staticmethod
     def _holiday_line(now):

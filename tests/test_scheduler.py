@@ -10,6 +10,7 @@ from tm_bot.services.scheduler.jobs import (
     NIGHT_TRENDS_TIMEOUT,
     ScheduledMessages,
     build_jobs,
+    tag_platforms,
 )
 from tm_bot.services.scheduler.prompts import GAME_DEALS_SENTINEL
 from tm_bot.services.scheduler.runner import (
@@ -161,6 +162,8 @@ class TestGameDeals(unittest.TestCase):
         self.assertIn("工具沒提供連結的遊戲就只寫名稱", question)
         # 哨兵指示：Agent 平常聊天會把哨兵轉成可愛回覆，排程必須要求原樣回覆才能比對
         self.assertIn("請只回覆 GAME_DEALS_UNAVAILABLE", question)
+        # 平台標籤由 Bot 端加（tag_platforms），提詞要交代模型不要自己寫，避免重複
+        self.assertIn("平台名稱不用寫進文字裡", question)
 
     def test_sentinel_reply_returns_none_for_silent_skip(self):
         messages = make_messages(FakeAgent(GAME_DEALS_SENTINEL))
@@ -476,6 +479,56 @@ class TestCatchUp(unittest.IsolatedAsyncioTestCase):
             await scheduler._catch_up(make_job(build), self.TARGET)
 
         self.assertEqual(seen, ["9:05"])
+
+
+class TestPlatformTags(unittest.TestCase):
+    """平台標籤由程式從連結網域判斷——這是事實而非判斷，不該交給模型。"""
+
+    def test_steam_link_gets_steam_tag(self):
+        line = "🧟 [Zombie Army 4](<https://store.steampowered.com/app/694280>)：狂殺喪屍"
+
+        self.assertTrue(tag_platforms(line).startswith("【Steam】 "))
+
+    def test_epic_link_gets_epic_tag(self):
+        line = "🎁 [Caravan](<https://store.epicgames.com/zh-TW/p/x>)：限免"
+
+        self.assertTrue(tag_platforms(line).startswith("【Epic】 "))
+
+    def test_tag_works_without_angle_brackets(self):
+        # 角括號是提詞要求的，但少了也要標得出來（別因為模型漏一個字元就整行沒標）
+        line = "[Caravan](https://store.epicgames.com/p/x)"
+
+        self.assertTrue(tag_platforms(line).startswith("【Epic】 "))
+
+    def test_line_without_link_is_untouched(self):
+        # 開場總結那句、以及工具沒給連結而只寫名稱的遊戲
+        for line in ("本週神作骨折！", "沒有連結的遊戲"):
+            self.assertEqual(tag_platforms(line), line)
+
+    def test_lookalike_domain_is_not_tagged(self):
+        # evilsteampowered.com 不是 Steam：比對必須到網域邊界
+        line = "[山寨](<https://evilsteampowered.com/app/1>)"
+
+        self.assertEqual(tag_platforms(line), line)
+
+    def test_only_game_lines_are_tagged_in_a_full_message(self):
+        message = "\n".join(
+            (
+                "本週骨折連發！",
+                "[A](<https://store.epicgames.com/p/a>)：免費",
+                "[B](<https://store.steampowered.com/app/2>)：特價",
+            )
+        )
+
+        lines = tag_platforms(message).splitlines()
+
+        self.assertEqual(lines[0], "本週骨折連發！")
+        self.assertTrue(lines[1].startswith("【Epic】 "))
+        self.assertTrue(lines[2].startswith("【Steam】 "))
+
+    def test_empty_and_none_are_safe(self):
+        self.assertEqual(tag_platforms(""), "")
+        self.assertIsNone(tag_platforms(None))
 
 
 if __name__ == "__main__":
